@@ -1,0 +1,583 @@
+/* FerayPro Tracer — Styles v1.0.0 */
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+:root {
+    --fpt-green:    #1a7a4a;
+    --fpt-green-lt: #e6f5ee;
+    --fpt-dark:     #0f1c13;
+    --fpt-gray:     #f4f6f4;
+    --fpt-border:   #d0ddd4;
+    --fpt-text:     #1e2d22;
+    --fpt-muted:    #6b8070;
+    --fpt-white:    #ffffff;
+    --fpt-radius:   12px;
+    --fpt-mono:     'Space Mono', monospace;
+    --fpt-sans:     'DM Sans', sans-serif;
+}
+
+/* ── BLOC INLINE SUR ANNONCE ──────────────────────────────────────────────── */
+.fpt-inline-block {
+    font-family: var(--fpt-sans);
+    border: 2px solid var(--fpt-green);
+    border-radius: var(--fpt-radius);
+    overflow: hidden;
+    margin-top: 32px;
+    background: var(--fpt-white);
+    box-shadow: 0 4px 20px rgba(26,122,74,0.08);
+}
+
+.fpt-inline-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--fpt-green-lt);
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--fpt-border);
+}
+
+.fpt-inline-icon {
+    font-size: 28px;
+    flex-shrink: 0;
+}
+
+.fpt-inline-header > div:nth-child(2) {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.fpt-inline-header strong {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--fpt-dark);
+}
+
+.fpt-inline-id {
+    font-family: var(--fpt-mono);
+    font-size: 11px;
+    color: var(--fpt-muted);
+}
+
+.fpt-inline-co2 {
+    font-family: var(--fpt-mono);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--fpt-green);
+    white-space: nowrap;
+}
+
+.fpt-inline-body {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 20px;
+}
+
+.fpt-inline-stats {
+    flex: 1;
+    display: flex;
+    gap: 28px;
+    flex-wrap: wrap;
+}
+
+.fpt-inline-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.fpt-inline-val {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--fpt-text);
+}
+
+.fpt-inline-lbl {
+    font-size: 11px;
+    color: var(--fpt-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.fpt-inline-qr {
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.fpt-inline-qr img {
+    width: 90px;
+    height: 90px;
+    display: block;
+    margin: 0 auto 4px;
+}
+
+.fpt-inline-qr p {
+    font-size: 10px;
+    color: var(--fpt-muted);
+    margin: 0;
+}
+
+.fpt-inline-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+    background: var(--fpt-gray);
+    border-top: 1px solid var(--fpt-border);
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.fpt-inline-footer a {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--fpt-green);
+    text-decoration: none;
+}
+
+.fpt-inline-footer a:hover { text-decoration: underline; }
+
+.fpt-inline-footer span {
+    font-size: 11px;
+    color: var(--fpt-muted);
+}
+
+@media (max-width: 500px) {
+    .fpt-inline-header { flex-wrap: wrap; }
+    .fpt-inline-co2    { width: 100%; }
+    .fpt-inline-body   { flex-direction: column; gap: 16px; }
+}
+
+
+.fpt-lot-card {
+    font-family: var(--fpt-sans);
+    background: var(--fpt-white);
+    border: 1.5px solid var(--fpt-border);
+    border-radius: var(--fpt-radius);
+    overflow: hidden;
+    max-width: 720px;
+    margin: 24px auto;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+}
+
+.fpt-lot-header {
+    background: var(--fpt-dark);
+    color: var(--fpt-white);
+    padding: 24px 28px 20px;
+}
+
+.fpt-lot-badge {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.fpt-lot-id {
+    font-family: var(--fpt-mono);
+    font-size: 12px;
+    background: rgba(255,255,255,0.12);
+    padding: 4px 10px;
+    border-radius: 4px;
+    letter-spacing: 0.08em;
+}
+
+.fpt-lot-verified {
+    font-size: 12px;
+    color: #5dde8a;
+    font-weight: 600;
+}
+
+.fpt-lot-title {
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0 0 6px;
+    color: var(--fpt-white);
+}
+
+.fpt-lot-location {
+    font-size: 14px;
+    color: rgba(255,255,255,0.65);
+    margin: 0;
+}
+
+.fpt-lot-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 0;
+    align-items: start;
+}
+
+@media (max-width: 600px) {
+    .fpt-lot-body { grid-template-columns: 1fr; }
+}
+
+.fpt-lot-photo {
+    padding: 20px;
+    border-right: 1px solid var(--fpt-border);
+}
+
+.fpt-lot-photo img {
+    width: 100%;
+    border-radius: 8px;
+    object-fit: cover;
+    max-height: 180px;
+}
+
+.fpt-lot-data {
+    padding: 20px 24px;
+}
+
+.fpt-stat-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+
+.fpt-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.fpt-stat-value {
+    font-family: var(--fpt-mono);
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--fpt-text);
+}
+
+.fpt-stat--green .fpt-stat-value {
+    color: var(--fpt-green);
+}
+
+.fpt-stat-label {
+    font-size: 12px;
+    color: var(--fpt-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.fpt-traced-date {
+    font-size: 12px;
+    color: var(--fpt-muted);
+    margin: 0 0 14px;
+}
+
+.fpt-whatsapp-btn {
+    display: inline-block;
+    background: #25D366;
+    color: #fff;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 6px;
+    transition: opacity 0.15s;
+}
+.fpt-whatsapp-btn:hover { opacity: 0.85; color: #fff; }
+
+.fpt-lot-qr {
+    padding: 20px;
+    text-align: center;
+    border-left: 1px solid var(--fpt-border);
+}
+
+.fpt-lot-qr img {
+    display: block;
+    width: 120px;
+    height: 120px;
+    margin: 0 auto 8px;
+}
+
+.fpt-lot-qr p {
+    font-size: 11px;
+    color: var(--fpt-muted);
+    margin: 0;
+}
+
+/* ── DASHBOARD ────────────────────────────────────────────────────────────── */
+.fpt-dashboard {
+    font-family: var(--fpt-sans);
+    max-width: 860px;
+    margin: 32px auto;
+}
+
+.fpt-dashboard-header {
+    text-align: center;
+    margin-bottom: 32px;
+}
+
+.fpt-dashboard-header h2 {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--fpt-dark);
+    margin-bottom: 6px;
+}
+
+.fpt-dashboard-header p {
+    color: var(--fpt-muted);
+    font-size: 15px;
+}
+
+.fpt-impact-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 36px;
+}
+
+@media (max-width: 640px) {
+    .fpt-impact-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+.fpt-impact-card {
+    background: var(--fpt-gray);
+    border: 1.5px solid var(--fpt-border);
+    border-radius: var(--fpt-radius);
+    padding: 20px 16px;
+    text-align: center;
+}
+
+.fpt-impact-card--primary {
+    background: var(--fpt-dark);
+    border-color: var(--fpt-dark);
+    color: var(--fpt-white);
+}
+
+.fpt-impact-card--green {
+    background: var(--fpt-green-lt);
+    border-color: var(--fpt-green);
+}
+
+.fpt-impact-icon {
+    font-size: 28px;
+    margin-bottom: 8px;
+}
+
+.fpt-impact-value {
+    font-family: var(--fpt-mono);
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--fpt-text);
+    line-height: 1.2;
+}
+
+.fpt-impact-card--primary .fpt-impact-value { color: var(--fpt-white); }
+.fpt-impact-card--green .fpt-impact-value    { color: var(--fpt-green); }
+
+.fpt-impact-label {
+    font-size: 12px;
+    color: var(--fpt-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-top: 4px;
+}
+
+.fpt-impact-card--primary .fpt-impact-label { color: rgba(255,255,255,0.55); }
+
+/* ── SECTION SANTÉ ENFANTS ────────────────────────────────────────────────── */
+.fpt-health-section {
+    margin: 36px 0 !important;
+    background: #fff !important;
+    border: 1.5px solid var(--fpt-border) !important;
+    border-radius: var(--fpt-radius) !important;
+    overflow: hidden !important;
+}
+
+.fpt-health-header {
+    background: #1a1a2e !important;
+    color: #fff !important;
+    padding: 20px 24px !important;
+}
+
+.fpt-health-header h3 {
+    font-size: 18px !important;
+    font-weight: 700 !important;
+    margin: 0 0 4px !important;
+    color: #fff !important;
+}
+
+.fpt-health-header p {
+    font-size: 12px !important;
+    color: rgba(255,255,255,0.6) !important;
+    margin: 0 !important;
+}
+
+.fpt-health-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 0 !important;
+    border-bottom: 1px solid var(--fpt-border) !important;
+}
+
+@media (max-width: 640px) {
+    .fpt-health-grid { grid-template-columns: repeat(2, 1fr) !important; }
+}
+
+.fpt-health-card {
+    padding: 20px 16px !important;
+    text-align: center !important;
+    border-right: 1px solid var(--fpt-border) !important;
+    background: var(--fpt-gray) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 4px !important;
+}
+
+.fpt-health-card:last-child { border-right: none !important; }
+
+.fpt-health-icon {
+    font-size: 28px !important;
+    margin-bottom: 6px !important;
+    display: block !important;
+}
+
+.fpt-health-value {
+    font-family: var(--fpt-mono) !important;
+    font-size: 20px !important;
+    font-weight: 700 !important;
+    line-height: 1.2 !important;
+    display: block !important;
+}
+
+.fpt-health-card--red    .fpt-health-value { color: #c0392b !important; }
+.fpt-health-card--orange .fpt-health-value { color: #e67e22 !important; }
+.fpt-health-card--yellow .fpt-health-value { color: #d4a017 !important; }
+.fpt-health-card--purple .fpt-health-value { color: #8e44ad !important; }
+
+.fpt-health-label {
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    color: var(--fpt-text) !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    display: block !important;
+}
+
+.fpt-health-info {
+    font-size: 11px !important;
+    color: var(--fpt-muted) !important;
+    line-height: 1.4 !important;
+    display: block !important;
+    margin-top: 4px !important;
+}
+
+.fpt-health-enfants {
+    display: flex !important;
+    align-items: center !important;
+    gap: 16px !important;
+    padding: 16px 24px !important;
+    background: #fff8e1 !important;
+    border-bottom: 1px solid #fde68a !important;
+}
+
+.fpt-health-enfants-icon {
+    font-size: 32px !important;
+    flex-shrink: 0 !important;
+}
+
+.fpt-health-enfants strong {
+    display: block !important;
+    font-size: 18px !important;
+    font-weight: 700 !important;
+    color: #92400e !important;
+}
+
+.fpt-health-enfants span {
+    font-size: 12px !important;
+    color: #b45309 !important;
+}
+
+.fpt-health-disclaimer {
+    font-size: 11px !important;
+    color: var(--fpt-muted) !important;
+    padding: 12px 24px !important;
+    margin: 0 !important;
+    font-style: italic !important;
+}
+
+
+.fpt-recent-lots h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 14px;
+    color: var(--fpt-dark);
+}
+
+.fpt-recent-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.fpt-recent-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--fpt-white);
+    border: 1.5px solid var(--fpt-border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    text-decoration: none;
+    color: var(--fpt-text);
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.fpt-recent-card:hover {
+    border-color: var(--fpt-green);
+    box-shadow: 0 2px 12px rgba(26,122,74,0.1);
+    color: var(--fpt-text);
+}
+
+.fpt-recent-card img {
+    width: 48px;
+    height: 48px;
+    border-radius: 6px;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.fpt-recent-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.fpt-recent-info strong {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.fpt-recent-info span {
+    font-size: 12px;
+    color: var(--fpt-muted);
+}
+
+.fpt-recent-co2 {
+    color: var(--fpt-green) !important;
+    font-weight: 500;
+}
+
+.fpt-recent-id {
+    font-family: var(--fpt-mono);
+    font-size: 11px;
+    color: var(--fpt-muted);
+    flex-shrink: 0;
+}
+
+.fpt-source {
+    text-align: center;
+    font-size: 12px;
+    color: var(--fpt-muted);
+    margin-top: 28px;
+}
+
+.fpt-source a {
+    color: var(--fpt-green);
+    text-decoration: none;
+}
