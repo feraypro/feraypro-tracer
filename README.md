@@ -1,8 +1,8 @@
 # FerayPro Tracer
 
-**Open-source waste batch traceability plugin for WordPress **
+**Open-source waste batch traceability plugin for WordPress**
 
-Automatically calculates CO₂ avoided and child health impact for every recycled waste batch published on a marketplace. Built for [FerayPro](https://ma.feraypro.com ; https://cd.feraypro.com ; https://fr.feraypro.com) — a circular waste marketplace operating in Morocco, DRC, France.
+Automatically calculates CO₂ avoided and child health impact for every recycled waste batch published on a marketplace. Built for [FerayPro](https://ma.feraypro.com)(https://cd.feraypro.com)(https://fr.feraypro.com) — a circular waste marketplace operating in Morocco, DRC, France, and the USA.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![WordPress](https://img.shields.io/badge/WordPress-Multisite-blue.svg)](https://wordpress.org)
@@ -17,7 +17,7 @@ Automatically calculates CO₂ avoided and child health impact for every recycle
 | Morocco | [ma.feraypro.com/impact](https://ma.feraypro.com/impact) | [ma.feraypro.com/methodologie](https://ma.feraypro.com/methodologie) |
 | DRC | [cd.feraypro.com/impact](https://cd.feraypro.com/impact) | — | [cd.feraypro.com/methodologie](https://cd.feraypro.com/methodologie) |
 | France | [fr.feraypro.com/impact](https://fr.feraypro.com/impact) | — | [fr.feraypro.com/methodologie](https://fr.feraypro.com/methodologie) |
-
+| USA | [us.feraypro.com/impact](https://us.feraypro.com/impact) | — | [feraypro.com/methodologie](https://feraypro.com/methodologie) |
 
 ---
 
@@ -78,6 +78,9 @@ Full methodology: [METHODOLOGY.md](METHODOLOGY.md)
 | City field name | `ville` | `city` |
 | Phone field name | `whatsapp` | `telephone` |
 | Price field name | `prixvendeur` | `pricebuyer` |
+| Prix du jour — Category slug | `prix` | `price` |
+| Prix/kg field name | `prix` | `price_2` |
+| Buyers list field name | *(empty — uses description)* | `buyersprice` |
 
 5. Create a WordPress page with slug `impact` and add `[fpt_dashboard]`
 6. Create a page with slug `methodologie` and add `[fpt_methodologie]`
@@ -142,7 +145,7 @@ Full factor list: [METHODOLOGY.md](METHODOLOGY.md)
 
 ## 🗺️ Roadmap
 
-### Phase 1 — MVP (Current)
+### Phase 1 — MVP (Current — v1.4.5)
 - [x] CO₂ calculation engine (200+ materials, FR + EN)
 - [x] Child health impact indicators (4 pollutants)
 - [x] QR code generation per batch
@@ -150,13 +153,16 @@ Full factor list: [METHODOLOGY.md](METHODOLOGY.md)
 - [x] Methodology page
 - [x] Multi-country support (Morocco, DRC, France, USA)
 - [x] Bilingual FR/EN
-- [x] Configurable field names and weight units
+- [x] Configurable field names and weight units (kg/lb)
+- [x] Dynamic unit display throughout (dashboard, listing, methodology)
+- [x] Prix du jour block — today's buyer prices on each listing
+- [x] Configurable price category slug and field names per country
 
-### Phase 2 — ML Refinement (Future)
+### Phase 2 — ML Refinement (2026)
 - [ ] Random Forest model trained on Morocco + DRC field data
 - [ ] Geospatial health model with distance-decay functions
 - [ ] Statistical confidence intervals on all estimates
-- [ ] Arabic, Lingala, Swahili, others keyword support
+- [ ] Arabic, Lingala, Swahili keyword support
 - [ ] Interactive geospatial impact map
 - [ ] Export API for governments and NGOs
 - [ ] TF-IDF fallback for unrecognized material descriptions
@@ -210,7 +216,9 @@ If you use FerayPro Tracer in research or reports, please cite:
 ```
 FerayPro Tracer (2026). Open-source waste batch traceability plugin.
 MIT License. https://github.com/feraypro/feraypro-tracer
+Impact methodology: https://ma.feraypro.com/methodologie
 ```
 
 ---
 
+*Built with ❤️ for the informal collectors, the scrap dealers, and the children living near recycling sites.*

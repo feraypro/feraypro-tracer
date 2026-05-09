@@ -13,6 +13,20 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 define( 'FPT_VERSION', '1.3.0' );
 
+// ─── Helper : affichage du poids selon l'unité configurée ────────────────────
+function fpt_weight_unit_label() {
+    return get_option( 'fpt_weight_unit', 'kg' ) === 'lb' ? 'lb' : 'kg';
+}
+
+function fpt_display_weight( $poids_kg ) {
+    $unit = get_option( 'fpt_weight_unit', 'kg' );
+    if ( $unit === 'lb' ) {
+        $poids_lb = $poids_kg / 0.453592;
+        return number_format( $poids_lb, 0, '.', ' ' ) . ' lb';
+    }
+    return number_format( $poids_kg, 0, '.', ' ' ) . ' kg';
+}
+
 // ─── Helper : langue du site ───────────────────────────────────────────────────
 function fpt_lang() {
     return get_option( 'fpt_language', 'fr' ); // 'fr' ou 'en'
@@ -62,10 +76,19 @@ function fpt_get_prix_du_jour( $titre_lot ) {
     foreach ( $prix_listings as $prix_post ) {
         $prix_titre_lower = strtolower( remove_accents( $prix_post->post_title ) );
         if ( strpos( $prix_titre_lower, $matched_keyword ) !== false ) {
-            $prix_field = get_post_meta( $prix_post->ID, 'hp_prix', true );
+            $prix_key    = 'hp_' . get_option( 'fpt_key_prix_jour', 'prix' );
+            $prix_field  = get_post_meta( $prix_post->ID, $prix_key, true );
+
+            // Description : post_content en priorité, sinon hp_buyersprice configurable
+            $description = trim( $prix_post->post_content );
+            if ( empty( $description ) ) {
+                $buyers_key  = 'hp_' . get_option( 'fpt_key_buyersprice', 'buyersprice' );
+                $description = get_post_meta( $prix_post->ID, $buyers_key, true );
+            }
+
             return [
                 'titre'      => $prix_post->post_title,
-                'description'=> $prix_post->post_content,
+                'description'=> $description,
                 'prix_range' => $prix_field,
                 'url'        => get_permalink( $prix_post->ID ),
                 'updated'    => get_the_modified_date( 'd/m/Y', $prix_post->ID ),
@@ -125,7 +148,7 @@ function fpt_inject_on_listing( $content ) {
         <div class="fpt-inline-body">
             <div class="fpt-inline-stats">
                 <div class="fpt-inline-stat">
-                    <span class="fpt-inline-val"><?php echo esc_html( number_format($poids_kg,0,'','') ); ?> kg</span>
+                    <span class="fpt-inline-val"><?php echo esc_html( fpt_display_weight( $poids_kg ) ); ?></span>
                     <span class="fpt-inline-lbl"><?php echo fpt_t('Poids collecté','Weight collected'); ?></span>
                 </div>
                 <?php if ( $ville ): ?>
@@ -214,8 +237,10 @@ function fpt_inject_on_listing( $content ) {
                     <?php endif; ?>
                 </div>
             </div>
-            <?php if ( $prix_data['prix_range'] ): ?>
-            <div class="fpt-prix-range">📊 <?php echo esc_html( $prix_data['prix_range'] ); ?></div>
+            <?php if ( $prix_data['prix_range'] ): 
+                $unit_label = get_option( 'fpt_weight_unit', 'kg' ) === 'lb' ? '/lb' : '/kg';
+            ?>
+            <div class="fpt-prix-range">📊 <?php echo esc_html( $prix_data['prix_range'] ); ?> <?php echo esc_html( $unit_label ); ?></div>
             <?php endif; ?>
         </div>
         <div class="fpt-prix-body">
@@ -979,8 +1004,8 @@ function fpt_shortcode_lot( $atts ) {
             <div class="fpt-lot-data">
                 <div class="fpt-stat-grid">
                     <div class="fpt-stat">
-                        <span class="fpt-stat-value"><?php echo esc_html( number_format( $poids, 0, ',', ' ' ) ); ?></span>
-                        <span class="fpt-stat-label">kg collectés</span>
+                        <span class="fpt-stat-value"><?php echo esc_html( fpt_display_weight( $poids ) ); ?></span>
+                        <span class="fpt-stat-label"><?php echo fpt_t('kg collectés', fpt_weight_unit_label() . ' collected'); ?></span>
                     </div>
                     <div class="fpt-stat fpt-stat--green">
                         <span class="fpt-stat-value"><?php echo esc_html( $co2_display ); ?></span>
@@ -995,12 +1020,12 @@ function fpt_shortcode_lot( $atts ) {
                 </div>
 
                 <?php if ( $traced ): ?>
-                <p class="fpt-traced-date">Tracé le <?php echo esc_html( date_i18n( 'd/m/Y à H:i', strtotime( $traced ) ) ); ?></p>
+                <p class="fpt-traced-date"><?php echo fpt_t('Tracé le','Traced on'); ?> <?php echo esc_html( date_i18n( 'd/m/Y à H:i', strtotime( $traced ) ) ); ?></p>
                 <?php endif; ?>
 
                 <?php if ( $whatsapp ): ?>
                 <a class="fpt-whatsapp-btn" href="https://wa.me/<?php echo esc_attr( preg_replace('/[^0-9]/', '', $whatsapp) ); ?>" target="_blank">
-                    💬 Contacter via WhatsApp
+                    💬 <?php echo fpt_t('Contacter via WhatsApp','Contact via WhatsApp'); ?>
                 </a>
                 <?php endif; ?>
             </div>
@@ -1090,7 +1115,7 @@ function fpt_shortcode_dashboard( $atts ) {
             </div>
             <div class="fpt-impact-card">
                 <div class="fpt-impact-icon">⚖️</div>
-                <div class="fpt-impact-value"><?php echo esc_html( number_format( $total_poids / 1000, 1 ) ); ?> t</div>
+                <div class="fpt-impact-value"><?php echo esc_html( fpt_display_weight( $total_poids ) ); ?></div>
                 <div class="fpt-impact-label"><?php echo fpt_t('Déchets collectés','Waste collected'); ?></div>
             </div>
             <div class="fpt-impact-card fpt-impact-card--green">
@@ -1166,7 +1191,7 @@ function fpt_shortcode_dashboard( $atts ) {
                 <?php endif; ?>
                 <div class="fpt-recent-info">
                     <strong><?php echo esc_html( get_the_title( $lot->ID ) ); ?></strong>
-                    <span><?php echo esc_html( $ville ); ?> · <?php echo esc_html( number_format($poids,0) ); ?> kg</span>
+                    <span><?php echo esc_html( $ville ); ?> · <?php echo esc_html( fpt_display_weight( $poids ) ); ?></span>
                     <span class="fpt-recent-co2">🌱 <?php echo esc_html( number_format($co2_lot,3) ); ?> t CO₂ <?php echo fpt_t('évité','avoided'); ?></span>
                 </div>
                 <span class="fpt-recent-id"><?php echo esc_html( $lot_id ); ?></span>
@@ -1193,7 +1218,11 @@ add_shortcode( 'fpt_methodologie', 'fpt_shortcode_methodologie' );
 function fpt_shortcode_methodologie( $atts ) {
     $site_name = get_option( 'fpt_site_name', 'FerayPro' );
     $unit      = get_option( 'fpt_weight_unit', 'kg' );
-    $unit_lbl  = $unit === 'lb' ? 'lb → kg (×0.453)' : 'kg';
+    $unit_lbl  = $unit === 'lb' ? 'lb' : 'kg';
+    $unit_long = $unit === 'lb' ? 'lb (pounds)' : 'kg (kilogrammes)';
+    $poids_ex  = $unit === 'lb' ? '24 lb' : '11 kg';
+    $poids_t_ex = $unit === 'lb' ? '24 lb → 0.011 t' : '11 kg → 0.011 t';
+    $conv_note = $unit === 'lb' ? fpt_t('Note : les livres (lb) sont automatiquement converties en kg (× 0,453592) avant le calcul.','Note: pounds (lb) are automatically converted to kg (× 0.453592) before calculation.') : '';
 
     ob_start(); ?>
     <style>
@@ -1259,12 +1288,22 @@ function fpt_shortcode_methodologie( $atts ) {
 
         <h3><?php echo fpt_t('Formule','Formula'); ?></h3>
         <div class="fpt-meth-formula">
-            CO₂ <?php echo fpt_t('évité','avoided'); ?> (t) = <?php echo fpt_t('Poids','Weight'); ?> (kg) ÷ 1000 × <?php echo fpt_t('Facteur CO₂ (t CO₂ / t recyclée)','CO₂ Factor (t CO₂ / t recycled)'); ?>
+            CO₂ <?php echo fpt_t('évité','avoided'); ?> (t) = <?php echo fpt_t('Poids','Weight'); ?> (<?php echo esc_html($unit_lbl); ?>) ÷ 1000 × <?php echo fpt_t('Facteur CO₂ (t CO₂ / t recyclée)','CO₂ Factor (t CO₂ / t recycled)'); ?>
+            <?php if ( $unit === 'lb' ) : ?><br><em style="font-size:12px;font-weight:400"><?php echo fpt_t('Note : lb convertis automatiquement en kg (× 0,453592)','Note: lb automatically converted to kg (× 0.453592)'); ?></em><?php endif; ?>
         </div>
-        <p><strong><?php echo fpt_t('Exemple','Example'); ?> :</strong> <?php echo fpt_t(
-            '11 kg de cuivre → 0,011 t × 3,5 = 0,0385 t de CO₂ évité (38,5 kg)',
-            '11 kg of copper → 0.011 t × 3.5 = 0.0385 t CO₂ avoided (38.5 kg)'
-        ); ?></p>
+        <p><strong><?php echo fpt_t('Exemple','Example'); ?> :</strong> <?php
+            if ( $unit === 'lb' ) {
+                echo fpt_t(
+                    '24 lb de cuivre → 0,011 t × 3,5 = 0,0385 t de CO₂ évité (38,5 kg)',
+                    '24 lb of copper → 0.011 t × 3.5 = 0.0385 t CO₂ avoided (38.5 kg)'
+                );
+            } else {
+                echo fpt_t(
+                    '11 kg de cuivre → 0,011 t × 3,5 = 0,0385 t de CO₂ évité (38,5 kg)',
+                    '11 kg of copper → 0.011 t × 3.5 = 0.0385 t CO₂ avoided (38.5 kg)'
+                );
+            }
+        ?></p>
 
         <h3><?php echo fpt_t('Détection du type de déchet','Waste type detection'); ?></h3>
         <p><?php echo fpt_t(
@@ -1396,6 +1435,8 @@ function fpt_admin_page() {
         update_option( 'fpt_key_prix',      sanitize_key( $_POST['fpt_key_prix'] ) );
         update_option( 'fpt_weight_unit',   in_array( $_POST['fpt_weight_unit'], ['kg','lb'] ) ? $_POST['fpt_weight_unit'] : 'kg' );
         update_option( 'fpt_prix_cat_slug', sanitize_key( $_POST['fpt_prix_cat_slug'] ) );
+        update_option( 'fpt_key_prix_jour',    sanitize_text_field( $_POST['fpt_key_prix_jour'] ) );
+        update_option( 'fpt_key_buyersprice',  sanitize_text_field( $_POST['fpt_key_buyersprice'] ) );
         update_option( 'fpt_prix_category_slug', sanitize_key( $_POST['fpt_prix_category_slug'] ) );
         echo '<div class="notice notice-success"><p>Paramètres sauvegardés / Settings saved.</p></div>';
     }
@@ -1466,6 +1507,20 @@ function fpt_admin_page() {
                     <td>
                         <input type="text" id="fpt_prix_cat_slug" name="fpt_prix_cat_slug" value="<?php echo esc_attr( get_option('fpt_prix_cat_slug','prix') ); ?>" class="regular-text" placeholder="prix">
                         <p class="description">🇫🇷 prix &nbsp;|&nbsp; 🇬🇧 price — <?php _e('HivePress → Listings → Categories → slug'); ?></p>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="fpt_key_prix_jour">Prix/kg field name (Prix du jour)</label></th>
+                    <td>
+                        <input type="text" id="fpt_key_prix_jour" name="fpt_key_prix_jour" value="<?php echo esc_attr( get_option('fpt_key_prix_jour','prix') ); ?>" class="regular-text" placeholder="prix">
+                        <p class="description">🇫🇷 prix &nbsp;|&nbsp; 🇬🇧 kg: <strong>price</strong> · 🇺🇸 lb: <strong>price_2</strong></p>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="fpt_key_buyersprice">Buyers list field name (Prix du jour)</label></th>
+                    <td>
+                        <input type="text" id="fpt_key_buyersprice" name="fpt_key_buyersprice" value="<?php echo esc_attr( get_option('fpt_key_buyersprice','buyersprice') ); ?>" class="regular-text" placeholder="buyersprice">
+                        <p class="description">🇫🇷 laisser vide (description utilisée) &nbsp;|&nbsp; 🇬🇧 <strong>buyersprice</strong></p>
                     </td>
                 </tr>
                 <tr>

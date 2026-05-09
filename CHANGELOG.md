@@ -6,7 +6,161 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.4.5] — 2026
+
+### Added
+- **Dynamic weight unit throughout all displays** — weight unit (kg or lb) now adapts automatically everywhere based on the configured setting:
+  - Lot card: "11 kg collectés" / "24 lb collected"
+  - Dashboard waste collected card
+  - Inline block on listing pages
+  - Recent lots list
+  - Methodology page formula and example
+- `fpt_display_weight()` helper: converts stored kg value to lb for display when unit = lb
+- `fpt_weight_unit_label()` helper: returns `kg` or `lb`
+- Methodology formula now shows correct unit + conversion note for lb sites
+- Methodology example uses 24 lb (copper) on lb sites, 11 kg on kg sites
+
+### Note
+Child health indicators (lead, PM2.5, cadmium, mercury) always display in scientific units (kg/g) regardless of weight unit setting — these are WHO/EPA/UNEP standardized units and converting to lb would be scientifically incorrect.
+
+---
+
+## [1.4.4] — 2026
+
+### Fixed
+- **Critical**: `hp_buyersprice` field (US sites) was not being read for the Prix du jour description — added as configurable fallback when `post_content` is empty
+- **Critical**: `price-2` field name was being sanitized by `sanitize_key()` to `price2` — corrected to use `price_2` (WordPress stores with underscore, not hyphen)
+
+### Added
+- **Buyers list field name** configurable in admin settings (`fpt_key_buyersprice`)
+  - French sites: leave empty (uses post_content description)
+  - English/US sites: `buyersprice`
+- Description fallback chain: `post_content` → `hp_{buyersprice_key}`
+
+---
+
+## [1.4.3] — 2026
+
+### Added
+- **Prix/kg unit label** displayed alongside price range in Prix du jour block
+  - Automatically shows `/kg` or `/lb` based on configured weight unit
+- **Prix/kg field name** configurable in admin settings (`fpt_key_prix_jour`)
+  - 🇫🇷 `prix` · 🇬🇧 `price` · 🇺🇸 `price_2`
+- **Buyers list field name** configurable (`fpt_key_buyersprice`)
+
+---
+
+## [1.4.2] — 2026
+
+### Added
+- **Prix du jour category slug** configurable in admin settings (`fpt_prix_cat_slug`)
+  - 🇫🇷 `prix` · 🇬🇧/🇺🇸 `price`
+- Bilingual title matching for Prix du jour: detects both "Prix du CUIVRE" and "Copper Price" via shared keyword (`cuivre`/`copper`)
+
+### Fixed
+- Prix du jour was hardcoded to slug `prix` — now configurable per country site
+
+---
+
+## [1.4.1] — 2026
+
+### Fixed
+- **Images in Prix du jour description** were stripped by `strip_tags()` leaving blank spaces — replaced with `wp_kses()` which allows safe HTML including `<img>`, `<p>`, `<ul>`, `<table>`, `<figure>`
+- Added CSS rules for images inside `.fpt-prix-desc`: `max-width:100%`, `height:auto`, rounded corners
+
+---
+
+## [1.4.0] — 2026
+
+### Added
+- **Prix du jour block** — automatically displays today's buyer prices on each seller listing:
+  - Detects material type from listing title (same keyword engine as CO₂ calculation)
+  - Finds matching "Prix du jour" listing in the configured price category
+  - Displays: listing title, price range (hp_prix field), full description (acheteurs list), last updated date, link to full price page
+  - Bilingual labels (FR/EN) following configured language
+  - Orange color scheme to visually distinguish from green CO₂ block
+- `fpt_get_prix_du_jour()` function added
+
+---
+
 ## [1.3.1] — 2026
+
+### Fixed
+- Replaced all hardcoded HivePress meta keys with configurable helper functions
+- Added `fpt_get_poids_kg()` for automatic lb → kg conversion
+- Fixed meta key reading in inject function and `save_post` hook
+
+---
+
+## [1.3.0] — 2026
+
+### Added
+- Bilingual support FR/EN for all dashboard labels
+- Language selector in admin settings
+- 200+ English keywords for CO₂ detection
+- Configurable field names per country site
+- Configurable weight unit (kg/lb) with automatic conversion
+
+---
+
+## [1.2.0] — 2026
+
+### Added
+- Section 2 — Child Health Impact (Lead, PM2.5, Cadmium, Mercury)
+- Children Protected synthetic estimate
+- `fpt_calculate_health()` function
+
+---
+
+## [1.1.2] — 2026
+
+### Fixed
+- Health section CSS grid overridden by ListingHive — migrated to inline styles
+
+---
+
+## [1.1.1] — 2026
+
+### Fixed
+- `fpt_recalculate_global_stats()` now processes ALL listings, not just already-traced ones
+- HivePress meta key prefix confirmed as `hp_`
+
+---
+
+## [1.1.0] — 2026
+
+### Added
+- Auto-inject CO₂ block on every listing page
+- FP Tracer Settings panel (platform name, country, language)
+- `[fpt_methodologie]` shortcode
+
+---
+
+## [1.0.0] — 2026
+
+### Initial Release
+- CO₂ calculation engine (50+ materials, ADEME Base Carbone)
+- QR code generation per batch
+- Digital Batch ID (FP-XXXXXXXX)
+- `[fpt_dashboard]` and `[fpt_lot]` shortcodes
+- Admin panel with recalculate function
+
+---
+
+## Planned — [2.0.0]
+
+- [ ] Random Forest ML model (Morocco + DRC field data)
+- [ ] Statistical confidence intervals
+- [ ] Geospatial health model
+- [ ] Interactive impact map
+- [ ] Arabic, Lingala, Swahili keywords
+- [ ] TF-IDF fallback classification
+- [ ] Export API for governments/NGOs
+
+---
+
+*FerayPro Tracer — Open Source MIT — [github.com/feraypro/feraypro-tracer](https://github.com/feraypro/feraypro-tracer)*
+
 
 ### Fixed
 - Replaced all hardcoded HivePress meta keys (`hp_poids`, `hp_ville`, etc.) with configurable helper functions (`fpt_key_poids()`, `fpt_key_ville()`, etc.)
