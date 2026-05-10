@@ -69,34 +69,60 @@ function fpt_get_prix_du_jour( $titre_lot ) {
 
     if ( ! $matched_keyword ) return null;
 
-    // Chercher l'annonce Prix du jour dont le titre contient ce mot-clé
-    // Supporte les deux formats :
-    // FR : "Prix du CUIVRE", "Prix de l'Aluminium"
-    // EN : "Copper Price", "Aluminium Price"
+    // ── Matching par score de pertinence ──────────────────────────────────
+    // Cherche l'annonce Prix du jour dont le titre contient le mieux
+    // le mot-clé principal du lot (score 10) + mots supplémentaires (score +1)
+    // Ex: "Assorted copper" → matched_keyword = "copper"
+    //     "Copper price" score 10 > "Radiator price" score 0 → correct
+    $best_match = null;
+    $best_score = 0;
+
+    $lot_words = array_filter(
+        explode( ' ', $titre_lower ),
+        function( $w ) { return strlen( $w ) >= 3; }
+    );
+
     foreach ( $prix_listings as $prix_post ) {
         $prix_titre_lower = strtolower( remove_accents( $prix_post->post_title ) );
+        $score = 0;
+
+        // Poids fort : le mot-clé principal du lot est dans le titre Prix du jour
         if ( strpos( $prix_titre_lower, $matched_keyword ) !== false ) {
-            $prix_key    = 'hp_' . get_option( 'fpt_key_prix_jour', 'prix' );
-            $prix_field  = get_post_meta( $prix_post->ID, $prix_key, true );
+            $score += 10;
+        }
 
-            // Description : post_content en priorité, sinon hp_buyersprice configurable
-            $description = trim( $prix_post->post_content );
-            if ( empty( $description ) ) {
-                $buyers_key  = 'hp_' . get_option( 'fpt_key_buyersprice', 'buyersprice' );
-                $description = get_post_meta( $prix_post->ID, $buyers_key, true );
+        // Poids faible : autres mots du lot présents dans le titre Prix du jour
+        foreach ( $lot_words as $word ) {
+            if ( strpos( $prix_titre_lower, $word ) !== false ) {
+                $score += 1;
             }
+        }
 
-            return [
-                'titre'      => $prix_post->post_title,
-                'description'=> $description,
-                'prix_range' => $prix_field,
-                'url'        => get_permalink( $prix_post->ID ),
-                'updated'    => get_the_modified_date( 'd/m/Y', $prix_post->ID ),
-            ];
+        if ( $score > $best_score ) {
+            $best_score = $score;
+            $best_match = $prix_post;
         }
     }
 
-    return null;
+    // Seuil minimum : le mot-clé principal doit être présent (score >= 10)
+    if ( ! $best_match || $best_score < 10 ) return null;
+
+    $prix_key    = 'hp_' . get_option( 'fpt_key_prix_jour', 'prix' );
+    $prix_field  = get_post_meta( $best_match->ID, $prix_key, true );
+
+    $description = trim( $best_match->post_content );
+    if ( empty( $description ) ) {
+        $buyers_key  = 'hp_' . get_option( 'fpt_key_buyersprice', 'buyersprice' );
+        $description = get_post_meta( $best_match->ID, $buyers_key, true );
+    }
+
+    return [
+        'titre'      => $best_match->post_title,
+        'description'=> $description,
+        'prix_range' => $prix_field,
+        'url'        => get_permalink( $best_match->ID ),
+        'updated'    => get_the_modified_date( 'd/m/Y', $best_match->ID ),
+    ];
 }
 
 // ─── Injection automatique du bloc CO₂ sur chaque annonce vendeur ─────────────
@@ -1133,45 +1159,54 @@ function fpt_shortcode_dashboard( $atts ) {
         <!-- ── Section Santé Enfants / Child Health ──────────────────── -->
         <div class="fpt-health-section">
             <div class="fpt-health-header">
-                <h3>👶 <?php echo fpt_t('Impact Santé Enfants','Child Health Impact'); ?></h3>
-                <p><?php echo fpt_t('Polluants évités grâce au recyclage formel vs informel — Sources : OMS · Pure Earth · EPA','Pollutants avoided through formal vs informal recycling — Sources: WHO · Pure Earth · EPA'); ?></p>
+                <h3>🔬 <?php echo fpt_t('Indicateurs de Réduction d\'Exposition aux Polluants','Pollutant Exposure Risk Reduction Indicators'); ?></h3>
+                <p><?php echo fpt_t(
+                    'Estimations de polluants détournés du recyclage informel — Sources : OMS · Pure Earth · EPA · UNEP',
+                    'Estimated pollutant diversion from informal recycling — Sources: WHO · Pure Earth · EPA · UNEP'
+                ); ?></p>
             </div>
             <div class="fpt-health-grid">
                 <div class="fpt-health-card fpt-health-card--red">
                     <div class="fpt-health-icon">🔴</div>
                     <div class="fpt-health-value"><?php echo esc_html( number_format( $health['plomb_kg'], 2 ) ); ?> kg</div>
-                    <div class="fpt-health-label"><?php echo fpt_t('Plomb non dispersé','Lead not dispersed'); ?></div>
-                    <div class="fpt-health-info"><?php echo fpt_t("Évite retards mentaux et baisse de QI chez l'enfant","Prevents cognitive delays and IQ loss in children"); ?></div>
+                    <div class="fpt-health-label"><?php echo fpt_t('Plomb détourné (estimé)','Lead diverted (est.)'); ?></div>
+                    <div class="fpt-health-info"><?php echo fpt_t('Réduction estimée du risque d\'exposition (OMS — aucun seuil sans effet)','Estimated exposure risk reduction (WHO — no safe threshold)'); ?></div>
                 </div>
                 <div class="fpt-health-card fpt-health-card--orange">
                     <div class="fpt-health-icon">☁️</div>
                     <div class="fpt-health-value"><?php echo esc_html( number_format( $health['pm25_kg'], 1 ) ); ?> kg</div>
-                    <div class="fpt-health-label"><?php echo fpt_t('PM2.5 évitées','PM2.5 avoided'); ?></div>
-                    <div class="fpt-health-info"><?php echo fpt_t('Évite maladies respiratoires (brûlage de câbles)','Prevents respiratory disease (cable burning)'); ?></div>
+                    <div class="fpt-health-label"><?php echo fpt_t('PM2.5 détournées (estimé)','PM2.5 diverted (est.)'); ?></div>
+                    <div class="fpt-health-info"><?php echo fpt_t('Proxy de réduction d\'exposition respiratoire (brûlage câbles évité)','Respiratory exposure risk proxy (avoided cable burning)'); ?></div>
                 </div>
                 <div class="fpt-health-card fpt-health-card--yellow">
                     <div class="fpt-health-icon">⚠️</div>
                     <div class="fpt-health-value"><?php echo esc_html( number_format( $health['cadmium_g'], 0 ) ); ?> g</div>
-                    <div class="fpt-health-label"><?php echo fpt_t('Cadmium évité','Cadmium avoided'); ?></div>
-                    <div class="fpt-health-info"><?php echo fpt_t('Évite atteintes rénales et osseuses (e-waste, piles)','Prevents kidney and bone damage (e-waste, batteries)'); ?></div>
+                    <div class="fpt-health-label"><?php echo fpt_t('Cadmium détourné (estimé)','Cadmium diverted (est.)'); ?></div>
+                    <div class="fpt-health-info"><?php echo fpt_t('Proxy de réduction du risque rénal (e-waste, piles)','Renal risk reduction proxy (e-waste, batteries)'); ?></div>
                 </div>
                 <div class="fpt-health-card fpt-health-card--purple">
                     <div class="fpt-health-icon">🧠</div>
                     <div class="fpt-health-value"><?php echo esc_html( number_format( $health['mercure_g'], 0 ) ); ?> g</div>
-                    <div class="fpt-health-label"><?php echo fpt_t('Mercure évité','Mercury avoided'); ?></div>
-                    <div class="fpt-health-info"><?php echo fpt_t('Évite troubles neurologiques (écrans, lampes)','Prevents neurological disorders (screens, lamps)'); ?></div>
+                    <div class="fpt-health-label"><?php echo fpt_t('Mercure détourné (estimé)','Mercury diverted (est.)'); ?></div>
+                    <div class="fpt-health-info"><?php echo fpt_t('Proxy de réduction du risque neurologique (écrans, lampes)','Neurological risk reduction proxy (screens, lamps)'); ?></div>
                 </div>
             </div>
             <?php if ( $health['enfants'] > 0 ): ?>
             <div class="fpt-health-enfants">
-                <span class="fpt-health-enfants-icon">👶</span>
+                <span class="fpt-health-enfants-icon">📊</span>
                 <div>
-                    <strong><?php echo esc_html( number_format( $health['enfants'] ) ); ?> <?php echo fpt_t('enfants protégés','children protected'); ?></strong>
-                    <span><?php echo fpt_t("estimation basée sur les seuils d'exposition OMS","estimate based on WHO exposure thresholds"); ?></span>
+                    <strong><?php echo fpt_t('Indice de réduction du risque d\'exposition','Exposure Risk Reduction Index'); ?> : <?php echo esc_html( number_format( $health['enfants'] ) ); ?></strong>
+                    <span><?php echo fpt_t(
+                        'Proxy estimatif basé sur les seuils d\'exposition OMS et HEI — non validé cliniquement, validation terrain prévue Phase 2',
+                        'Estimative proxy based on WHO and HEI exposure thresholds — not clinically validated, field validation planned Phase 2'
+                    ); ?></span>
                 </div>
             </div>
             <?php endif; ?>
-            <p class="fpt-health-disclaimer">* <?php echo fpt_t('Estimations basées sur les facteurs d\'émission OMS, Pure Earth et EPA. Le recyclage formel évite le brûlage à ciel ouvert et l\'enfouissement non contrôlé.','Estimates based on WHO, Pure Earth and EPA emission factors. Formal recycling prevents open burning and uncontrolled landfilling.'); ?></p>
+            <p class="fpt-health-disclaimer">* <?php echo fpt_t(
+                'Estimations conservatrices basées sur des facteurs d\'émission globaux (OMS, Pure Earth, EPA). Ces indicateurs représentent une réduction estimée du risque d\'exposition aux polluants — ils ne constituent pas une attribution causale d\'impact clinique. Validation terrain et affinage ML prévu en Phase 2.',
+                'Conservative estimates based on global emission factors (WHO, Pure Earth, EPA). These indicators represent an estimated pollutant exposure risk reduction — they do not constitute causal clinical impact attribution. Field validation and ML refinement planned for Phase 2.'
+            ); ?></p>
         </div>
 
         <?php if ( ! empty( $recent ) ): ?>
@@ -1334,42 +1369,42 @@ function fpt_shortcode_methodologie( $atts ) {
         </ul>
 
         <!-- SECTION 2 SANTÉ -->
-        <h2>👶 <?php echo fpt_t('Section 2 — Impact Santé Enfants','Section 2 — Child Health Impact'); ?></h2>
+        <h2>🔬 <?php echo fpt_t('Section 2 — Indicateurs de Réduction du Risque d\'Exposition','Section 2 — Pollutant Exposure Risk Reduction Indicators'); ?></h2>
 
-        <h3><?php echo fpt_t('Contexte','Background'); ?></h3>
+        <h3><?php echo fpt_t('Contexte scientifique','Scientific context'); ?></h3>
         <p><?php echo fpt_t(
-            'Le recyclage informel est l\'une des principales sources d\'exposition aux métaux lourds pour les enfants vivant près des sites de collecte. Les pratiques les plus nocives incluent le brûlage de câbles pour extraire le cuivre (PM2.5), le démantèlement de batteries au plomb (plomb), et le traitement d\'e-waste sans équipement (cadmium, mercure).',
-            'Informal recycling is one of the main sources of heavy metal exposure for children living near collection sites. The most harmful practices include cable burning to extract copper (PM2.5), lead battery dismantling (lead), and unequipped e-waste processing (cadmium, mercury).'
+            'Le recyclage informel est l\'une des principales sources d\'exposition aux métaux lourds dans les zones de collecte. Ces indicateurs estiment la quantité de polluants détournés du recyclage informel (brûlage de câbles, démantèlement de batteries, traitement d\'e-waste) vers des filières formelles contrôlées. Ils représentent une réduction estimée du risque d\'exposition — pas une attribution causale d\'impact clinique.',
+            'Informal recycling is one of the main sources of heavy metal exposure in collection areas. These indicators estimate the quantity of pollutants diverted from informal recycling (cable burning, battery dismantling, e-waste processing) toward controlled formal channels. They represent an estimated exposure risk reduction — not causal clinical impact attribution.'
         ); ?></p>
 
-        <h3><?php echo fpt_t('Les 4 indicateurs calculés','The 4 calculated indicators'); ?></h3>
+        <h3><?php echo fpt_t('Les 4 indicateurs de diversion estimée','The 4 estimated diversion indicators'); ?></h3>
 
-        <h4><span class="fpt-meth-tag fpt-meth-tag--red">🔴</span> <?php echo fpt_t('Plomb non dispersé (kg)','Lead not dispersed (kg)'); ?></h4>
-        <div class="fpt-meth-formula"><?php echo fpt_t('Plomb évité (kg)','Lead avoided (kg)'); ?> = Σ [ <?php echo fpt_t('Poids','Weight'); ?> (t) × 0,5 ] — <?php echo fpt_t('lots contenant : plomb, batterie, radiateur, soudure','batches containing: lead, battery, radiator, solder'); ?></div>
-        <p><?php echo fpt_t('Source : Pure Earth (2016), WHO Lead Exposure Report (2021) — facteur 0,5 kg/t (conservative).','Source: Pure Earth (2016), WHO Lead Exposure Report (2021) — factor 0.5 kg/t (conservative).'); ?><br>
-        <?php echo fpt_t('Impact : exposition au plomb → retard mental, baisse de QI chez l\'enfant (OMS : aucun seuil sans effet).','Impact: lead exposure → mental delay, IQ loss in children (WHO: no safe threshold).'); ?></p>
+        <h4><span class="fpt-meth-tag fpt-meth-tag--red">🔴</span> <?php echo fpt_t('Plomb détourné — estimation (kg)','Lead diverted — estimate (kg)'); ?></h4>
+        <div class="fpt-meth-formula"><?php echo fpt_t('Plomb détourné (kg)','Lead diverted (kg)'); ?> = Σ [ <?php echo fpt_t('Poids','Weight'); ?> (t) × 0,5 ] — <?php echo fpt_t('lots contenant : plomb, batterie, radiateur, soudure','batches containing: lead, battery, radiator, solder'); ?></div>
+        <p><?php echo fpt_t('Source : Pure Earth (2016), WHO Lead Exposure Report (2021) — facteur 0,5 kg/t (conservateur).','Source: Pure Earth (2016), WHO Lead Exposure Report (2021) — factor 0.5 kg/t (conservative).'); ?><br>
+        <?php echo fpt_t('Contexte de risque : le plomb est associé à des effets neurodéveloppementaux chez l\'enfant — l\'OMS indique qu\'il n\'existe pas de seuil d\'exposition sans effet.','Risk context: lead is associated with neurodevelopmental effects in children — WHO states there is no safe exposure threshold.'); ?></p>
 
-        <h4><span class="fpt-meth-tag fpt-meth-tag--orange">☁️</span> PM2.5 <?php echo fpt_t('évitées (kg)','avoided (kg)'); ?></h4>
-        <div class="fpt-meth-formula">PM2.5 <?php echo fpt_t('évitées (kg)','avoided (kg)'); ?> = Σ [ <?php echo fpt_t('Poids','Weight'); ?> (t) × 15 ] — <?php echo fpt_t('lots contenant : câble, cuivre, plastique, pneu','batches containing: cable, copper, plastic, tire'); ?></div>
-        <p><?php echo fpt_t('Source : EPA AP-42 (2022) — brûlage d\'une tonne de câbles génère ~15 kg de PM2.5.','Source: EPA AP-42 (2022) — burning one tonne of cables generates ~15 kg of PM2.5.'); ?><br>
-        <?php echo fpt_t('Impact : maladies respiratoires, asthme, retard de développement pulmonaire.','Impact: respiratory diseases, asthma, delayed lung development.'); ?></p>
+        <h4><span class="fpt-meth-tag fpt-meth-tag--orange">☁️</span> PM2.5 <?php echo fpt_t('détournées — estimation (kg)','diverted — estimate (kg)'); ?></h4>
+        <div class="fpt-meth-formula">PM2.5 <?php echo fpt_t('détournées (kg)','diverted (kg)'); ?> = Σ [ <?php echo fpt_t('Poids','Weight'); ?> (t) × 15 ] — <?php echo fpt_t('lots contenant : câble, cuivre, plastique, pneu','batches containing: cable, copper, plastic, tire'); ?></div>
+        <p><?php echo fpt_t('Source : EPA AP-42 (2022) — brûlage d\'une tonne de câbles génère ~15 kg de PM2.5 en conditions terrain.','Source: EPA AP-42 (2022) — burning one tonne of cables generates ~15 kg of PM2.5 under field conditions.'); ?><br>
+        <?php echo fpt_t('Contexte de risque : les PM2.5 sont associées aux maladies respiratoires — proxy de réduction du risque d\'exposition.','Risk context: PM2.5 is associated with respiratory disease — proxy for exposure risk reduction.'); ?></p>
 
-        <h4><span class="fpt-meth-tag fpt-meth-tag--yellow">⚠️</span> <?php echo fpt_t('Cadmium évité (g)','Cadmium avoided (g)'); ?></h4>
-        <div class="fpt-meth-formula"><?php echo fpt_t('Cadmium évité (g)','Cadmium avoided (g)'); ?> = Σ [ <?php echo fpt_t('Poids','Weight'); ?> (t) × 200 ] — <?php echo fpt_t('lots contenant : pile, e-waste, smartphone','batches containing: battery, e-waste, smartphone'); ?></div>
+        <h4><span class="fpt-meth-tag fpt-meth-tag--yellow">⚠️</span> <?php echo fpt_t('Cadmium détourné — estimation (g)','Cadmium diverted — estimate (g)'); ?></h4>
+        <div class="fpt-meth-formula"><?php echo fpt_t('Cadmium détourné (g)','Cadmium diverted (g)'); ?> = Σ [ <?php echo fpt_t('Poids','Weight'); ?> (t) × 200 ] — <?php echo fpt_t('lots contenant : pile, e-waste, smartphone','batches containing: battery, e-waste, smartphone'); ?></div>
         <p><?php echo fpt_t('Source : Pure Earth Toxic Sites Database (2020), UNEP (2018) — 200 g cadmium/tonne d\'e-waste.','Source: Pure Earth Toxic Sites Database (2020), UNEP (2018) — 200g cadmium/tonne of e-waste.'); ?><br>
-        <?php echo fpt_t('Impact : atteintes rénales irréversibles, troubles osseux chez l\'enfant en croissance.','Impact: irreversible kidney damage, bone disorders in growing children.'); ?></p>
+        <?php echo fpt_t('Contexte de risque : le cadmium est associé aux atteintes rénales — proxy de réduction du risque d\'exposition.','Risk context: cadmium is associated with kidney damage — proxy for exposure risk reduction.'); ?></p>
 
-        <h4><span class="fpt-meth-tag fpt-meth-tag--purple">🧠</span> <?php echo fpt_t('Mercure évité (g)','Mercury avoided (g)'); ?></h4>
-        <div class="fpt-meth-formula"><?php echo fpt_t('Mercure évité (g)','Mercury avoided (g)'); ?> = Σ [ <?php echo fpt_t('Poids','Weight'); ?> (t) × 50 ] — <?php echo fpt_t('lots contenant : écran, TV, lampe, néon','batches containing: screen, TV, lamp, neon'); ?></div>
+        <h4><span class="fpt-meth-tag fpt-meth-tag--purple">🧠</span> <?php echo fpt_t('Mercure détourné — estimation (g)','Mercury diverted — estimate (g)'); ?></h4>
+        <div class="fpt-meth-formula"><?php echo fpt_t('Mercure détourné (g)','Mercury diverted (g)'); ?> = Σ [ <?php echo fpt_t('Poids','Weight'); ?> (t) × 50 ] — <?php echo fpt_t('lots contenant : écran, TV, lampe, néon','batches containing: screen, TV, lamp, neon'); ?></div>
         <p><?php echo fpt_t('Source : UNEP Minamata Convention (2018) — 50 g mercure/tonne d\'équipements électroniques.','Source: UNEP Minamata Convention (2018) — 50g mercury/tonne of electronic equipment.'); ?><br>
-        <?php echo fpt_t('Impact : neurotoxique puissant, troubles neurologiques même à faible dose.','Impact: potent neurotoxin, neurological disorders even at low doses.'); ?></p>
+        <?php echo fpt_t('Contexte de risque : le mercure est un neurotoxique — proxy de réduction du risque d\'exposition même à faible dose.','Risk context: mercury is a neurotoxin — proxy for exposure risk reduction even at low doses.'); ?></p>
 
-        <h3><?php echo fpt_t('Enfants protégés — estimation synthétique','Children Protected — synthetic estimate'); ?></h3>
+        <h3><?php echo fpt_t('Indice de Réduction du Risque d\'Exposition (IRRE)','Exposure Risk Reduction Index (ERRI)'); ?></h3>
         <div class="fpt-meth-children">
-            <strong>👶 <?php echo fpt_t('Enfants protégés','Children protected'); ?> = (<?php echo fpt_t('Plomb évité kg','Lead avoided kg'); ?> × 50) + (PM2.5 <?php echo fpt_t('évitées kg','avoided kg'); ?> × 10)</strong>
+            <strong>📊 IRRE / ERRI = (<?php echo fpt_t('Plomb détourné kg','Lead diverted kg'); ?> × 50) + (PM2.5 <?php echo fpt_t('détournées kg','diverted kg'); ?> × 10)</strong>
             <p style="margin:0;font-size:14px;color:#92400e"><?php echo fpt_t(
-                '1 kg de plomb évité protège ~50 enfants dans un rayon de 500m (OMS 2021). 1 kg PM2.5 évité réduit l\'exposition pour ~10 enfants en zone périurbaine (HEI 2020).',
-                '1 kg of lead avoided protects ~50 children within 500m (WHO 2021). 1 kg PM2.5 avoided reduces exposure for ~10 children in peri-urban areas (HEI 2020).'
+                'Proxy estimatif basé sur les seuils d\'exposition OMS (2021) et HEI (2020). Cet indice n\'est pas peer-reviewed ni validé cliniquement. Il constitue un outil de mesure transitoire basé sur des coefficients globaux conservateurs — une validation terrain et un affinage ML sont prévus en Phase 2.',
+                'Estimative proxy based on WHO (2021) and HEI (2020) exposure thresholds. This index is not peer-reviewed or clinically validated. It is a transitional measurement tool based on conservative global coefficients — field validation and ML refinement are planned for Phase 2.'
             ); ?></p>
         </div>
 
@@ -1386,14 +1421,14 @@ function fpt_shortcode_methodologie( $atts ) {
         <div class="fpt-meth-source"><strong>IPCC AR6 (2022)</strong> — <?php echo fpt_t('Facteurs d\'émission industrie lourde','Heavy industry emission factors'); ?></div>
 
         <!-- LIMITES -->
-        <h2>⚠️ <?php echo fpt_t('Limites & Précautions','Limitations & Precautions'); ?></h2>
+        <h2>⚠️ <?php echo fpt_t('Limites & Statut de Validation','Limitations & Validation Status'); ?></h2>
         <p><?php echo fpt_t(
-            'Ces calculs sont des estimations basées sur des moyennes régionales. Les valeurs réelles varient selon la pureté du lot, la distance aux habitations, et les pratiques locales de recyclage. Ils ne prétendent pas mesurer des cas cliniques individuels, mais quantifier l\'ordre de grandeur de l\'impact collectif.',
-            'These calculations are estimates based on regional averages. Actual values vary depending on batch purity, distance to homes, and local recycling practices. They do not claim to measure individual clinical cases, but to quantify the order of magnitude of collective impact.'
+            'Ces indicateurs sont des estimations conservatrices basées sur des facteurs d\'émission globaux (OMS, Pure Earth, EPA, UNEP). Ils représentent une réduction estimée du risque d\'exposition aux polluants — ils ne constituent pas une attribution causale d\'impact clinique et n\'ont pas été validés par peer-review.',
+            'These indicators are conservative estimates based on global emission factors (WHO, Pure Earth, EPA, UNEP). They represent an estimated pollutant exposure risk reduction — they do not constitute causal clinical impact attribution and have not been peer-reviewed.'
         ); ?></p>
         <p><?php echo fpt_t(
-            'En Phase 2, un modèle Machine Learning (Random Forest) sera entraîné sur des données terrain locales pour affiner ces estimations.',
-            'In Phase 2, a Machine Learning model (Random Forest) will be trained on local field data to refine these estimates.'
+            'Système de mesure transitoire : FerayPro Tracer démarre avec des coefficients globaux conservateurs comme référence de base, et évolue vers des modèles validés localement grâce aux données terrain collectées au Maroc et en RDC (Phase 2). Les résultats de Phase 2 seront accompagnés d\'intervalles de confiance statistiques.',
+            'Transitional measurement system: FerayPro Tracer starts with conservative global coefficients as a baseline, and evolves toward locally validated models through field data collected in Morocco and the DRC (Phase 2). Phase 2 results will include statistical confidence intervals.'
         ); ?></p>
 
         <p class="fpt-meth-disclaimer">

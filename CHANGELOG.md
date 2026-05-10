@@ -6,7 +6,178 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.5.1] — 2026
+
+### Fixed
+- **Critical**: Prix du jour wrong match — "Assorted copper" was returning "Radiator price" instead of "Copper price"
+- Root cause: `get_posts()` returns listings in undefined order; first-match logic was unreliable
+- **New**: Best-match scoring algorithm replaces first-match
+  - Primary keyword match in Prix du jour title = score +10
+  - Additional lot title words present in Prix du jour title = score +1 each
+  - Minimum threshold: score ≥ 10 required (primary keyword must match)
+  - "Copper price" now always wins over "Radiator price" for "Assorted copper"
+
+---
+
+## [1.5.0] — 2026
+
+### Changed — Impact language reframe (UNICEF scientific defensibility)
+Full reframe of health indicator language to meet scientific defensibility standards for UNICEF Venture Fund reviewers.
+
+| Before ❌ | After ✅ |
+|-----------|---------|
+| "Child Health Impact" | "Pollutant Exposure Risk Reduction Indicators" |
+| "Children Protected" | "Exposure Risk Reduction Index (ERRI)" |
+| "Lead not dispersed" | "Lead diverted (est.)" |
+| "Prevents cognitive delays and IQ loss" | "Estimated exposure risk reduction (WHO)" |
+| "Prevents respiratory disease" | "Respiratory exposure risk proxy" |
+| "Prevents kidney damage" | "Renal risk reduction proxy" |
+| "Prevents neurological disorders" | "Neurological risk reduction proxy" |
+| Generic disclaimer | Explicit: "not peer-reviewed, field validation Phase 2" |
+| "Limitations & Precautions" | "Limitations & Validation Status" |
+| Implicitly definitive | Explicitly "transitional measurement system" |
+
+### Updated
+- Dashboard health section header emoji: 👶 → 🔬
+- ERRI index formula label: 📊 (not 👶)
+- Methodology page health section fully reframed with scientific language
+- Limitations section now states: "not peer-reviewed, not clinically validated, transitional measurement tool based on conservative global coefficients"
+- Added explicit Phase 2 validation commitment in disclaimer
+
+---
+
 ## [1.4.5] — 2026
+
+### Added
+- Dynamic weight unit throughout all displays (kg/lb)
+- `fpt_display_weight()` and `fpt_weight_unit_label()` helpers
+- Methodology formula and example adapt to configured weight unit
+- lb conversion note displayed on methodology page for US sites
+
+### Note
+Child health indicators always display in scientific units (kg/g) regardless of weight unit — WHO/EPA/UNEP standardized units.
+
+---
+
+## [1.4.4] — 2026
+
+### Fixed
+- `hp_buyersprice` field (US sites) added as configurable fallback for Prix du jour description
+- `price-2` → `price_2` (WordPress stores with underscore, not hyphen)
+
+### Added
+- Buyers list field name configurable in admin (`fpt_key_buyersprice`)
+
+---
+
+## [1.4.3] — 2026
+
+### Added
+- Price unit label `/kg` or `/lb` displayed alongside price range
+- Prix/kg field name configurable (`fpt_key_prix_jour`)
+
+---
+
+## [1.4.2] — 2026
+
+### Added
+- Prix du jour category slug configurable (`fpt_prix_cat_slug`)
+- 🇫🇷 `prix` · 🇬🇧/🇺🇸 `price`
+
+### Fixed
+- Category slug was hardcoded to `prix`
+
+---
+
+## [1.4.1] — 2026
+
+### Fixed
+- Images in Prix du jour description stripped by `strip_tags()` — replaced with `wp_kses()`
+
+---
+
+## [1.4.0] — 2026
+
+### Added
+- **Prix du jour block** on every seller listing
+- `fpt_get_prix_du_jour()` function
+- Material keyword matching between lot title and Prix du jour title
+
+---
+
+## [1.3.1] — 2026
+
+### Fixed
+- Configurable meta keys via helper functions
+- `fpt_get_poids_kg()` for automatic lb → kg conversion
+
+---
+
+## [1.3.0] — 2026
+
+### Added
+- Bilingual FR/EN support
+- Language selector in admin
+- 200+ English keywords
+- Configurable field names and weight units
+
+---
+
+## [1.2.0] — 2026
+
+### Added
+- Section 2 — Pollutant Exposure Risk Reduction Indicators (Lead, PM2.5, Cadmium, Mercury)
+- Exposure Risk Reduction Index (ERRI)
+- `fpt_calculate_health()` function
+
+---
+
+## [1.1.2] — 2026
+
+### Fixed
+- Health section CSS grid — migrated to inline styles
+
+---
+
+## [1.1.1] — 2026
+
+### Fixed
+- `fpt_recalculate_global_stats()` now processes ALL listings
+- HivePress meta key prefix `hp_` confirmed
+
+---
+
+## [1.1.0] — 2026
+
+### Added
+- Auto-inject CO₂ block on listing pages
+- FP Tracer Settings panel
+- `[fpt_methodologie]` shortcode
+
+---
+
+## [1.0.0] — 2026
+
+### Initial Release
+- CO₂ calculation engine (ADEME Base Carbone)
+- QR code per batch
+- `[fpt_dashboard]` and `[fpt_lot]` shortcodes
+- Admin panel
+
+---
+
+## Planned — [2.0.0]
+- [ ] Random Forest ML model (Morocco + DRC field data)
+- [ ] Statistical confidence intervals
+- [ ] Geospatial health model + impact map
+- [ ] Arabic, Lingala, Swahili keywords
+- [ ] TF-IDF fallback classification
+- [ ] Export API for governments/NGOs
+
+---
+
+*FerayPro Tracer — Open Source MIT — [github.com/feraypro/feraypro-tracer](https://github.com/feraypro/feraypro-tracer)*
+
 
 ### Added
 - **Dynamic weight unit throughout all displays** — weight unit (kg or lb) now adapts automatically everywhere based on the configured setting:

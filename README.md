@@ -1,8 +1,8 @@
 # FerayPro Tracer
 
-**Open-source waste batch traceability plugin for WordPress**
+**Open-source waste batch traceability plugin for WordPress / HivePress**
 
-Automatically calculates CO₂ avoided and child health impact for every recycled waste batch published on a marketplace. Built for [FerayPro](https://ma.feraypro.com)(https://cd.feraypro.com)(https://fr.feraypro.com) — a circular waste marketplace operating in Morocco, DRC, France, and the USA.
+Automatically calculates CO₂ avoided and child health impact for every recycled waste batch published on a marketplace. Built for [FerayPro](https://ma.feraypro.com)(https://cd.feraypro.com)(https://fr.feraypro.com) — a circular waste marketplace operating in Morocco, DRC, France.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![WordPress](https://img.shields.io/badge/WordPress-Multisite-blue.svg)](https://wordpress.org)
@@ -15,9 +15,9 @@ Automatically calculates CO₂ avoided and child health impact for every recycle
 | Site | Dashboard | Methodology |
 |------|-----------|-------------|
 | Morocco | [ma.feraypro.com/impact](https://ma.feraypro.com/impact) | [ma.feraypro.com/methodologie](https://ma.feraypro.com/methodologie) |
-| DRC | [cd.feraypro.com/impact](https://cd.feraypro.com/impact) | — | [cd.feraypro.com/methodologie](https://cd.feraypro.com/methodologie) |
-| France | [fr.feraypro.com/impact](https://fr.feraypro.com/impact) | — | [fr.feraypro.com/methodologie](https://fr.feraypro.com/methodologie) |
-| USA | [us.feraypro.com/impact](https://us.feraypro.com/impact) | — | [feraypro.com/methodologie](https://feraypro.com/methodologie) |
+| DRC | [cd.feraypro.com/impact](https://cd.feraypro.com/impact) | — |
+| France | [fr.feraypro.com/impact](https://fr.feraypro.com/impact) | — |
+| USA | [feraypro.com/impact](https://feraypro.com/impact) | — |
 
 ---
 
@@ -131,35 +131,41 @@ Full factor list: [METHODOLOGY.md](METHODOLOGY.md)
 
 ---
 
-## 👶 Child Health Factors
+## 🔬 Pollutant Exposure Risk Reduction Indicators
+
+Estimated pollutant diversion from informal recycling — conservative global coefficients, field validation planned Phase 2.
 
 | Indicator | Formula | Source |
 |-----------|---------|--------|
-| Lead avoided (kg) | Weight (t) × 0.5 | Pure Earth 2016, WHO 2021 |
-| PM2.5 avoided (kg) | Weight (t) × 15 | EPA AP-42 2022 |
-| Cadmium avoided (g) | Weight (t) × 200 | Pure Earth 2020, UNEP 2018 |
-| Mercury avoided (g) | Weight (t) × 50 | UNEP Minamata 2018 |
-| Children protected | (Lead kg × 50) + (PM2.5 kg × 10) | WHO GHO 2021, HEI 2020 |
+| Lead diverted est. (kg) | Weight (t) × 0.5 | Pure Earth 2016, WHO 2021 |
+| PM2.5 diverted est. (kg) | Weight (t) × 15 | EPA AP-42 2022 |
+| Cadmium diverted est. (g) | Weight (t) × 200 | Pure Earth 2020, UNEP 2018 |
+| Mercury diverted est. (g) | Weight (t) × 50 | UNEP Minamata 2018 |
+| ERRI (Exposure Risk Reduction Index) | (Lead kg × 50) + (PM2.5 kg × 10) | WHO GHO 2021, HEI 2020 |
+
+> **Note:** These indicators represent estimated exposure risk reduction — not peer-reviewed or clinically validated impact attribution. They are a transitional measurement tool evolving toward locally validated ML models in Phase 2.
 
 ---
 
 ## 🗺️ Roadmap
 
-### Phase 1 — MVP (Current — v1.4.5)
+### Phase 1 — MVP (Current — v1.5.1)
 - [x] CO₂ calculation engine (200+ materials, FR + EN)
-- [x] Child health impact indicators (4 pollutants)
+- [x] Pollutant exposure risk reduction indicators (Lead, PM2.5, Cadmium, Mercury)
+- [x] Exposure Risk Reduction Index (ERRI) — scientifically framed
 - [x] QR code generation per batch
 - [x] Public impact dashboard
-- [x] Methodology page
+- [x] Methodology page with validation status
 - [x] Multi-country support (Morocco, DRC, France, USA)
 - [x] Bilingual FR/EN
 - [x] Configurable field names and weight units (kg/lb)
 - [x] Dynamic unit display throughout (dashboard, listing, methodology)
 - [x] Prix du jour block — today's buyer prices on each listing
+- [x] Best-match scoring for Prix du jour (fixes wrong material match)
 - [x] Configurable price category slug and field names per country
 
-### Phase 2 — ML Refinement (2026)
-- [ ] Random Forest model trained on Morocco + DRC field data
+### Phase 2 — ML Refinement 
+- [ ] Random Forest model trained on Morocco + DRC + France field data
 - [ ] Geospatial health model with distance-decay functions
 - [ ] Statistical confidence intervals on all estimates
 - [ ] Arabic, Lingala, Swahili keyword support
