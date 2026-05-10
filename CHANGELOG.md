@@ -6,7 +6,164 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.5.3] — 2026
+
+### Fixed
+- Calculation bar text touching the edge — CSS padding overridden by ListingHive theme
+- Migrated `.fpt-inline-calc` styles to inline HTML attributes to guarantee padding regardless of theme
+
+---
+
+## [1.5.2] — 2026
+
+### Added
+- **CO₂ Calculation detail bar** on every seller listing, displayed between stats and footer
+- Shows: detected material keyword · ADEME factor (t CO₂/t) · full formula · result
+- Example: `🔍 Calculation | Copper · 3.5 t CO₂/t · 0.011 t × 3.5 = 0.0385 t CO₂ | ADEME`
+- Bilingual labels (FR: "Calcul" / EN: "Calculation")
+- Material displayed as pill badge (white background, bordered)
+- Formula in monospace font for readability
+- "ADEME" source tag on the right
+- Material detection reused from CO₂ engine — no extra computation
+
+---
+
 ## [1.5.1] — 2026
+
+### Fixed
+- Prix du jour wrong match ("Assorted copper" returning "Radiator price")
+- New best-match scoring: primary keyword match = +10, additional word matches = +1
+- Minimum threshold score ≥ 10 required (primary keyword must match Prix du jour title)
+
+---
+
+## [1.5.0] — 2026
+
+### Changed — Impact language reframe
+Full reframe of health indicator language for UNICEF scientific defensibility.
+
+| Before ❌ | After ✅ |
+|-----------|---------|
+| "Child Health Impact" | "Pollutant Exposure Risk Reduction Indicators" |
+| "Children Protected" | "Exposure Risk Reduction Index (ERRI)" |
+| "Lead not dispersed" | "Lead diverted (est.)" |
+| "Prevents cognitive delays" | "Estimated exposure risk reduction (WHO)" |
+| Generic disclaimer | Explicit: "not peer-reviewed, field validation Phase 2" |
+| Implicitly definitive | "Transitional measurement system" |
+
+---
+
+## [1.4.5] — 2026
+
+### Added
+- Dynamic weight unit (kg/lb) throughout all displays
+- `fpt_display_weight()` and `fpt_weight_unit_label()` helpers
+- Methodology formula and example adapt to configured weight unit
+
+---
+
+## [1.4.4] — 2026
+
+### Fixed
+- `hp_buyersprice` added as configurable fallback for Prix du jour description
+- `price-2` → `price_2` (WordPress underscore convention)
+
+---
+
+## [1.4.3] — 2026
+
+### Added
+- Price unit label `/kg` or `/lb` in Prix du jour block
+- Prix/kg field name configurable (`fpt_key_prix_jour`)
+
+---
+
+## [1.4.2] — 2026
+
+### Added
+- Prix du jour category slug configurable (`fpt_prix_cat_slug`)
+
+---
+
+## [1.4.1] — 2026
+
+### Fixed
+- Images in Prix du jour description — `strip_tags()` → `wp_kses()`
+
+---
+
+## [1.4.0] — 2026
+
+### Added
+- Prix du jour block on every seller listing
+- `fpt_get_prix_du_jour()` matching function
+
+---
+
+## [1.3.1] — 2026
+
+### Fixed
+- All meta keys configurable via helper functions
+- `fpt_get_poids_kg()` for lb → kg conversion
+
+---
+
+## [1.3.0] — 2026
+
+### Added
+- Bilingual FR/EN, language selector, 200+ English keywords
+- Configurable field names and weight units
+
+---
+
+## [1.2.0] — 2026
+
+### Added
+- Pollutant Exposure Risk Reduction Indicators (Lead, PM2.5, Cadmium, Mercury)
+- Exposure Risk Reduction Index (ERRI)
+
+---
+
+## [1.1.2] — 2026
+
+### Fixed
+- Health section CSS grid — inline styles
+
+---
+
+## [1.1.1] — 2026
+
+### Fixed
+- Recalculate processes ALL listings, HivePress meta prefix `hp_`
+
+---
+
+## [1.1.0] — 2026
+
+### Added
+- Auto-inject CO₂ block, Settings panel, `[fpt_methodologie]` shortcode
+
+---
+
+## [1.0.0] — 2026
+
+### Initial Release
+- CO₂ engine, QR code, `[fpt_dashboard]`, `[fpt_lot]`, admin panel
+
+---
+
+## Planned — [2.0.0]
+- [ ] Random Forest ML (Morocco + DRC field data)
+- [ ] Statistical confidence intervals
+- [ ] Geospatial impact map
+- [ ] Arabic, Lingala, Swahili keywords
+- [ ] TF-IDF fallback classification
+- [ ] Export API for governments/NGOs
+
+---
+
+*FerayPro Tracer — Open Source MIT — [github.com/feraypro/feraypro-tracer](https://github.com/feraypro/feraypro-tracer)*
+
 
 ### Fixed
 - **Critical**: Prix du jour wrong match — "Assorted copper" was returning "Radiator price" instead of "Copper price"

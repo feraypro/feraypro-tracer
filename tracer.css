@@ -118,6 +118,63 @@
     margin: 0;
 }
 
+.fpt-inline-calc {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px 10px 20px;
+    margin: 0;
+    background: var(--fpt-green-lt);
+    border-top: 1px solid var(--fpt-border);
+    flex-wrap: wrap;
+    font-size: 13px;
+    box-sizing: border-box;
+    width: 100%;
+    overflow: hidden;
+}
+
+.fpt-inline-calc-label {
+    font-weight: 700;
+    color: var(--fpt-green);
+    flex-shrink: 0;
+}
+
+.fpt-inline-calc-material {
+    font-weight: 700;
+    color: var(--fpt-dark);
+    background: var(--fpt-white);
+    border: 1px solid var(--fpt-border);
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.fpt-inline-calc-sep {
+    color: var(--fpt-muted);
+}
+
+.fpt-inline-calc-factor {
+    font-family: var(--fpt-mono);
+    font-size: 12px;
+    color: var(--fpt-green);
+    font-weight: 700;
+}
+
+.fpt-inline-calc-formula {
+    font-family: var(--fpt-mono);
+    font-size: 12px;
+    color: var(--fpt-text);
+    flex: 1;
+}
+
+.fpt-inline-calc-source {
+    font-size: 10px;
+    color: var(--fpt-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    flex-shrink: 0;
+}
+
 .fpt-inline-footer {
     display: flex;
     justify-content: space-between;

@@ -1,6 +1,6 @@
 # FerayPro Tracer
 
-**Open-source waste batch traceability plugin for WordPress / HivePress**
+**Open-source waste batch traceability plugin for WordPress**
 
 Automatically calculates CO₂ avoided and child health impact for every recycled waste batch published on a marketplace. Built for [FerayPro](https://ma.feraypro.com)(https://cd.feraypro.com)(https://fr.feraypro.com) — a circular waste marketplace operating in Morocco, DRC, France.
 
@@ -149,8 +149,9 @@ Estimated pollutant diversion from informal recycling — conservative global co
 
 ## 🗺️ Roadmap
 
-### Phase 1 — MVP (Current — v1.5.1)
+### Phase 1 — MVP (Current — v1.5.3)
 - [x] CO₂ calculation engine (200+ materials, FR + EN)
+- [x] CO₂ calculation detail bar on each listing (material · factor · formula)
 - [x] Pollutant exposure risk reduction indicators (Lead, PM2.5, Cadmium, Mercury)
 - [x] Exposure Risk Reduction Index (ERRI) — scientifically framed
 - [x] QR code generation per batch
@@ -161,11 +162,11 @@ Estimated pollutant diversion from informal recycling — conservative global co
 - [x] Configurable field names and weight units (kg/lb)
 - [x] Dynamic unit display throughout (dashboard, listing, methodology)
 - [x] Prix du jour block — today's buyer prices on each listing
-- [x] Best-match scoring for Prix du jour (fixes wrong material match)
+- [x] Best-match scoring for Prix du jour
 - [x] Configurable price category slug and field names per country
 
-### Phase 2 — ML Refinement 
-- [ ] Random Forest model trained on Morocco + DRC + France field data
+### Phase 2 — ML Refinement (2026)
+- [ ] Random Forest model trained on Morocco + DRC field data
 - [ ] Geospatial health model with distance-decay functions
 - [ ] Statistical confidence intervals on all estimates
 - [ ] Arabic, Lingala, Swahili keyword support

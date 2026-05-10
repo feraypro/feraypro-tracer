@@ -161,6 +161,22 @@ function fpt_inject_on_listing( $content ) {
     $traced  = get_post_meta( $post_id, '_fpt_traced_at', true );
     $impact_url = home_url( '/impact' );
 
+    // ── Détection du matériau et facteur CO₂ ────────────────────────────────
+    $titre_lower     = strtolower( remove_accents( get_the_title( $post_id ) ) );
+    $factors         = fpt_co2_factors();
+    $detected_kw     = fpt_t('non reconnu','unrecognized');
+    $detected_factor = 1.0;
+    foreach ( $factors as $kw => $val ) {
+        if ( $kw === 'default' ) continue;
+        if ( strpos( $titre_lower, $kw ) !== false ) {
+            $detected_kw     = ucfirst( $kw );
+            $detected_factor = $val;
+            break;
+        }
+    }
+    $poids_t   = round( $poids_kg / 1000, 4 );
+    $calc_line = $poids_t . ' t × ' . $detected_factor . ' = ' . number_format( $co2, 4 ) . ' t CO₂';
+
     ob_start(); ?>
     <div class="fpt-inline-block">
         <div class="fpt-inline-header">
@@ -194,6 +210,15 @@ function fpt_inject_on_listing( $content ) {
                 <img src="<?php echo esc_url( $qr_url ); ?>" alt="QR <?php echo esc_attr($lot_id); ?>">
                 <p><?php echo fpt_t('Scanner ce lot','Scan this batch'); ?></p>
             </div>
+        </div>
+        <div class="fpt-inline-calc" style="display:flex!important;align-items:center;gap:8px;padding:10px 20px!important;background:#e6f5ee;border-top:1px solid #d0ddd4;flex-wrap:wrap;font-size:13px;box-sizing:border-box;width:100%;margin:0">
+            <span class="fpt-inline-calc-label" style="font-weight:700;color:#1a7a4a;flex-shrink:0">🔍 <?php echo fpt_t('Calcul','Calculation'); ?></span>
+            <span class="fpt-inline-calc-material" style="font-weight:700;color:#0f1c13;background:#fff;border:1px solid #d0ddd4;padding:2px 8px;border-radius:4px"><?php echo esc_html( $detected_kw ); ?></span>
+            <span style="color:#6b8070">·</span>
+            <span class="fpt-inline-calc-factor" style="font-family:monospace;font-size:12px;color:#1a7a4a;font-weight:700"><?php echo esc_html( $detected_factor ); ?> t CO₂/t</span>
+            <span style="color:#6b8070">·</span>
+            <span class="fpt-inline-calc-formula" style="font-family:monospace;font-size:12px;color:#1e2d22;flex:1"><?php echo esc_html( $calc_line ); ?></span>
+            <span class="fpt-inline-calc-source" style="font-size:10px;color:#6b8070;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;flex-shrink:0">ADEME</span>
         </div>
         <div class="fpt-inline-footer">
             <a href="<?php echo esc_url( $impact_url ); ?>">🌍 <?php echo fpt_t("Voir l'impact global FerayPro",'View FerayPro global impact'); ?></a>
