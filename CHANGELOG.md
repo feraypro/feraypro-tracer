@@ -6,7 +6,163 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.7.0] — 2026
+
+### Changed
+- **Transport CO₂ completely removed** from all displays and calculations
+  - Removed from buyer dashboard (stats + lot detail)
+  - Removed from admin metabox
+  - Removed from global `/impact` dashboard
+  - Removed from `save_post` hook
+  - Reason: simplification — transport estimates added unnecessary complexity
+
+### Added
+- **Phone number masking** for seller privacy
+  - Lot awaiting collection: `+21266XXXXXXX` (7 digits visible, rest masked)
+  - Lot already collected: full number displayed
+  - WhatsApp link always works with real number — only visual display is masked
+  - `fpt_mask_phone()` and `fpt_whatsapp_btn()` helper functions added
+
+---
+
+## [1.6.2] — 2026
+
+### Fixed
+- Buyer dashboard now calculates all stats in **real time** from lots
+  - No more cached `_fpt_buyer_co2_total`, `_fpt_buyer_lots_count`, `_fpt_buyer_poids_total`
+  - Fixes "6 lots" showing when only 2 were actually collected
+  - CO₂ transport recalculated at display time (not from stored meta)
+
+---
+
+## [1.6.1] — 2026
+
+### Fixed
+- **Critical transport CO₂ bug**: formula was using raw kg instead of tonnes
+  - Before: `poids_kg × distance × 0.062` (×1000 too high)
+  - After: `(poids_kg / 1000) × distance × 0.062`
+  - 30 kg × 150 km: was 0.279 t → now **0.000279 t**
+- Added "🔧 Recalculer CO₂ transport" button in admin to fix existing data
+
+### Added
+- **Buyer dashboard** (`[fpt_acheteur id="XXX"]`) — CO₂ produced by recycling process
+  - `fpt_co2_process_factors()` — FEDEREC/ADEME LCA 2017 process emission factors
+  - `fpt_calculate_process_co2()` — real-time calculation
+  - Cuivre: 1.304 t/t · Aluminium: 0.36 t/t · Acier: 1.10 t/t · Verre: 0.29 t/t
+- **"Confirm collection" metabox** in wp-admin (admin only)
+  - Dropdown of all registered buyers
+  - Records: buyer, date, CO₂ avoided, CO₂ process
+  - Cancel collection button
+- **Status badge** on listing page (⏳ À collecter / ✅ Collecté · Buyer name)
+- **JS badge injection** via `wp_footer` — universal, works with all HivePress templates
+  - Multiple retries (0ms, 1000ms, 2500ms) for lazy-loaded pages
+- **Partner tracking system** (`?ref=societe-a`)
+  - Cookie stored 30 days
+  - Auto-tagged on listing publish
+  - `[fpt_partenaires]` shortcode — dashboard by partner source
+- **Label fix**: "Poids collecté" → "Poids à collecter"
+
+---
+
+## [1.6.0] — 2026
+
+### Added
+- Collection confirmation system (admin metabox)
+- `fpt_get_acheteurs()` — fetch all registered buyers by category slug
+- `fpt_transport_distance_km()` — fixed distance by country
+- `fpt_calculate_transport_co2()` — road freight 0.062 kg CO₂/t·km
+- `[fpt_acheteur id="XXX"]` shortcode
+- Acheteurs category slug configurable in admin (`fpt_acheteurs_cat_slug`)
+
+---
+
 ## [1.5.3] — 2026
+
+### Fixed
+- Calculation bar padding overridden by ListingHive — migrated to inline HTML styles
+
+---
+
+## [1.5.2] — 2026
+
+### Added
+- CO₂ calculation detail bar on every seller listing
+- Shows: detected material · ADEME factor · full formula · result
+- Example: `🔍 Calcul | Cuivre · 0.141 t CO₂/t · 0.035 t × 0.141 = 0.00494 t CO₂ | ADEME`
+
+---
+
+## [1.5.1] — 2026
+
+### Fixed
+- Prix du jour wrong match — best-match scoring replaces first-match
+- Primary keyword match = +10, additional word matches = +1 each
+- Minimum threshold score ≥ 10 required
+
+---
+
+## [1.5.0] — 2026
+
+### Changed — Scientific language reframe
+| Before ❌ | After ✅ |
+|-----------|---------|
+| "Child Health Impact" | "Pollutant Exposure Risk Reduction Indicators" |
+| "Children Protected" | "Exposure Risk Reduction Index (ERRI)" |
+| "Lead not dispersed" | "Lead diverted (est.)" |
+| Generic disclaimer | "Not peer-reviewed, field validation Phase 2" |
+
+---
+
+## [1.4.5] — 2026
+- Dynamic weight unit (kg/lb) throughout all displays
+
+## [1.4.4] — 2026
+- `hp_buyersprice` fallback for Prix du jour · `price-2` → `price_2`
+
+## [1.4.3] — 2026
+- Price unit `/kg` or `/lb` in Prix du jour block
+
+## [1.4.2] — 2026
+- Prix du jour category slug configurable
+
+## [1.4.1] — 2026
+- Images in Prix du jour — `strip_tags()` → `wp_kses()`
+
+## [1.4.0] — 2026
+- Prix du jour block on every seller listing
+
+## [1.3.1] — 2026
+- Configurable meta keys · lb → kg conversion
+
+## [1.3.0] — 2026
+- Bilingual FR/EN · 200+ English keywords · configurable field names
+
+## [1.2.0] — 2026
+- Pollutant Exposure Risk Reduction Indicators (Lead, PM2.5, Cadmium, Mercury)
+- Exposure Risk Reduction Index (ERRI)
+
+## [1.1.x] — 2026
+- Auto-inject CO₂ block · Settings panel · `[fpt_methodologie]` shortcode
+- HivePress meta prefix `hp_` confirmed
+
+## [1.0.0] — 2026
+- Initial release: CO₂ engine · QR code · `[fpt_dashboard]` · `[fpt_lot]`
+
+---
+
+## Planned — [2.0.0]
+- [ ] Random Forest ML (Morocco + DRC field data)
+- [ ] Statistical confidence intervals
+- [ ] Geospatial impact map
+- [ ] Arabic, Lingala, Swahili keywords
+- [ ] TF-IDF fallback classification
+- [ ] Export API for governments/NGOs
+- [ ] GitHub auto-update across all country sites
+
+---
+
+*FerayPro Tracer — Open Source MIT — [github.com/feraypro/feraypro-tracer](https://github.com/feraypro/feraypro-tracer)*
+
 
 ### Fixed
 - Calculation bar text touching the edge — CSS padding overridden by ListingHive theme

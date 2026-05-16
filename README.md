@@ -1,8 +1,8 @@
 # FerayPro Tracer
 
-**Open-source waste batch traceability plugin for WordPress**
+**Open-source waste batch traceability plugin for WordPress / HivePress**
 
-Automatically calculates CO₂ avoided and child health impact for every recycled waste batch published on a marketplace. Built for [FerayPro](https://ma.feraypro.com)(https://cd.feraypro.com)(https://fr.feraypro.com) — a circular waste marketplace operating in Morocco, DRC, France.
+Automatically calculates CO₂ avoided and child health impact for every recycled waste batch published on a marketplace. Built for [FerayPro](https://ma.feraypro.com) — a circular waste marketplace operating in Morocco, DRC, France, and the USA.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![WordPress](https://img.shields.io/badge/WordPress-Multisite-blue.svg)](https://wordpress.org)
@@ -17,13 +17,13 @@ Automatically calculates CO₂ avoided and child health impact for every recycle
 | Morocco | [ma.feraypro.com/impact](https://ma.feraypro.com/impact) | [ma.feraypro.com/methodologie](https://ma.feraypro.com/methodologie) |
 | DRC | [cd.feraypro.com/impact](https://cd.feraypro.com/impact) | — |
 | France | [fr.feraypro.com/impact](https://fr.feraypro.com/impact) | — |
-| USA | [feraypro.com/impact](https://feraypro.com/impact) | — |
+| USA | [us.feraypro.com/impact](https://us.feraypro.com/impact) | — |
 
 ---
 
 ## 🌱 What It Does
 
-When a seller publishes a waste listing on FerayPro, the plugin automatically:
+When a seller publishes a waste listing on HivePress / ListingHive, the plugin automatically:
 
 1. **Detects the material type** from the listing title using 200+ bilingual keywords (French + English)
 2. **Calculates CO₂ avoided** using ADEME Base Carbone emission factors
@@ -95,6 +95,8 @@ Full methodology: [METHODOLOGY.md](METHODOLOGY.md)
 | `[fpt_dashboard]` | Live global impact dashboard |
 | `[fpt_lot id="241"]` | Public traceability page for a specific batch |
 | `[fpt_methodologie]` | Full calculation methodology page |
+| `[fpt_acheteur id="XXX"]` | Buyer dashboard — CO₂ produced by recycling process |
+| `[fpt_partenaires]` | Partner traffic source dashboard |
 
 ---
 
@@ -147,15 +149,30 @@ Estimated pollutant diversion from informal recycling — conservative global co
 
 ---
 
-## 🗺️ Roadmap
+## 🤝 Partner Tracking
 
-### Phase 1 — MVP (Current — v1.5.3)
-- [x] CO₂ calculation engine (200+ materials, FR + EN)
+Give partner companies this link format:
+```
+https://ma.feraypro.com/?ref=company-name
+```
+
+When a visitor arrives via this link and publishes a listing, the batch is automatically tagged with the partner name. View all partner batches at `[fpt_partenaires]`.
+
+## 🔒 Phone Privacy
+
+Seller phone numbers are automatically masked on public listing pages:
+- **Awaiting collection**: `+21266XXXXXXX` (7 digits visible)
+- **Already collected**: full number displayed
+
+The WhatsApp link always uses the real number — only the visual display is masked.
+
+### Phase 1 — MVP (Current — v1.7.0)
+- [x] CO₂ calculation engine (200+ materials, FR + EN) — corrected ADEME net gain factors
 - [x] CO₂ calculation detail bar on each listing (material · factor · formula)
 - [x] Pollutant exposure risk reduction indicators (Lead, PM2.5, Cadmium, Mercury)
 - [x] Exposure Risk Reduction Index (ERRI) — scientifically framed
 - [x] QR code generation per batch
-- [x] Public impact dashboard
+- [x] Public impact dashboard (CO₂ avoided · CO₂ produced by recycling · net balance)
 - [x] Methodology page with validation status
 - [x] Multi-country support (Morocco, DRC, France, USA)
 - [x] Bilingual FR/EN
@@ -164,6 +181,11 @@ Estimated pollutant diversion from informal recycling — conservative global co
 - [x] Prix du jour block — today's buyer prices on each listing
 - [x] Best-match scoring for Prix du jour
 - [x] Configurable price category slug and field names per country
+- [x] Collection confirmation (admin metabox) — buyer selection + date
+- [x] Status badge on listing cards (⏳ À collecter / ✅ Collecté)
+- [x] Buyer dashboard (`[fpt_acheteur id="XXX"]`) — CO₂ produced by recycling process
+- [x] Phone number masking for seller privacy
+- [x] Partner tracking system (`?ref=partner-name` + `[fpt_partenaires]`)
 
 ### Phase 2 — ML Refinement (2026)
 - [ ] Random Forest model trained on Morocco + DRC field data

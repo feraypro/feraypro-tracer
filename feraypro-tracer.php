@@ -11,7 +11,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'FPT_VERSION', '1.3.0' );
+define( 'FPT_VERSION', '1.6.0' );
 
 // ─── Helper : affichage du poids selon l'unité configurée ────────────────────
 function fpt_weight_unit_label() {
@@ -34,6 +34,517 @@ function fpt_lang() {
 
 function fpt_t( $fr, $en ) {
     return fpt_lang() === 'en' ? $en : $fr;
+}
+
+// ─── Badge statut sur les cards de la liste principale — injection JS universelle
+add_action( 'wp_footer', 'fpt_inject_badges_via_js' );
+function fpt_inject_badges_via_js() {
+    // Ne s'exécute que sur les pages avec des annonces hp_listing
+    if ( ! is_post_type_archive('hp_listing') && ! is_tax() && ! is_home() && ! is_front_page() ) {
+        // On injecte quand même sur toutes les pages pour couvrir les widgets
+    }
+
+    // Récupérer toutes les annonces vendeurs avec leur statut
+    $listings = get_posts([
+        'post_type'   => 'hp_listing',
+        'post_status' => 'publish',
+        'numberposts' => -1,
+        'fields'      => 'ids',
+        'meta_query'  => [[ 'key' => fpt_key_poids(), 'compare' => 'EXISTS' ]],
+    ]);
+
+    if ( empty($listings) ) return;
+
+    $data = [];
+    foreach ( $listings as $id ) {
+        $poids = fpt_get_poids_kg($id);
+        if ( $poids <= 0 ) continue;
+
+        $collected   = get_post_meta($id, '_fpt_collected', true);
+        $co2         = (float) get_post_meta($id, '_fpt_co2_avoided', true);
+        $ach_id      = get_post_meta($id, '_fpt_acheteur_id', true);
+        $ach_nom     = $ach_id ? get_the_title($ach_id) : '';
+        $co2_display = '';
+        if ($co2 > 0) {
+            $co2_display = $co2 < 1
+                ? round($co2 * 1000, 1) . ' kg CO₂'
+                : number_format($co2, 3, '.', '') . ' t CO₂';
+        }
+
+        $data[$id] = [
+            'collected'   => (bool) $collected,
+            'acheteur'    => $ach_nom,
+            'co2'         => $co2_display,
+        ];
+    }
+
+    $label_collected  = fpt_t('Collecté','Collected');
+    $label_available  = fpt_t('À collecter','Available');
+    ?>
+    <script>
+    (function() {
+        var data = <?php echo json_encode($data); ?>;
+        var labelCollected = <?php echo json_encode($label_collected); ?>;
+        var labelAvailable = <?php echo json_encode($label_available); ?>;
+
+        function injectBadges() {
+            Object.keys(data).forEach(function(id) {
+                var d = data[id];
+                // HivePress génère des liens avec /listing/slug/ — on cherche par data-id ou lien
+                // Chercher tous les éléments article ou div avec data-id ou lien contenant l'ID du post
+                var selectors = [
+                    'article[data-id="' + id + '"]',
+                    '[data-listing-id="' + id + '"]',
+                    '.hp-listing[data-id="' + id + '"]',
+                ];
+
+                var el = null;
+                selectors.forEach(function(sel) {
+                    if (!el) el = document.querySelector(sel);
+                });
+
+                // Fallback : chercher via le lien permalink
+                if (!el) {
+                    var links = document.querySelectorAll('a[href*="?p=' + id + '"], a[href*="/listing/"]');
+                    links.forEach(function(link) {
+                        if (!el && link.href && link.closest('article')) {
+                            // Vérifier si l'article contient ce post via wp classes
+                            var art = link.closest('article');
+                            if (art && (art.classList.contains('post-' + id) || art.id === 'post-' + id)) {
+                                el = art;
+                            }
+                        }
+                    });
+                }
+
+                // Fallback final : via classe WordPress post-{id}
+                if (!el) el = document.querySelector('.post-' + id);
+                if (!el) el = document.getElementById('post-' + id);
+
+                if (!el) return;
+
+                // Éviter le doublon
+                if (el.querySelector('.fpt-card-badge')) return;
+
+                var badge = document.createElement('div');
+                badge.className = 'fpt-card-badge';
+                badge.style.cssText = 'display:flex;gap:5px;align-items:center;flex-wrap:wrap;padding:6px 10px 4px;';
+
+                if (d.collected) {
+                    badge.innerHTML =
+                        '<span style="background:#1a7a4a;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;display:inline-block">✅ ' + labelCollected + (d.acheteur ? ' · ' + d.acheteur : '') + '</span>' +
+                        (d.co2 ? '<span style="background:#e6f5ee;color:#1a7a4a;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;display:inline-block">🌱 ' + d.co2 + '</span>' : '');
+                } else {
+                    badge.innerHTML =
+                        '<span style="background:#f59e0b;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;display:inline-block">⏳ ' + labelAvailable + '</span>' +
+                        (d.co2 ? '<span style="background:#e6f5ee;color:#1a7a4a;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;display:inline-block">🌱 ' + d.co2 + '</span>' : '');
+                }
+
+                // Insérer après le titre ou en début d'article
+                var titre = el.querySelector('h2, h3, .hp-listing__title, .entry-title');
+                if (titre && titre.parentNode) {
+                    titre.parentNode.insertBefore(badge, titre.nextSibling);
+                } else {
+                    el.prepend(badge);
+                }
+            });
+        }
+
+        // Exécuter après chargement DOM + délai pour les pages dynamiques
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', injectBadges);
+        } else {
+            injectBadges();
+        }
+        // Re-exécuter après 1s pour les pages avec lazy loading / AJAX
+        setTimeout(injectBadges, 1000);
+        setTimeout(injectBadges, 2500);
+    })();
+    </script>
+    <?php
+}
+
+// ─── Distance fixe par pays (Option A) ────────────────────────────────────────
+function fpt_transport_distance_km() {
+    $country = strtolower( get_option( 'fpt_country_name', '' ) );
+    $map = [
+        'maroc'   => 150, 'morocco'  => 150,
+        'france'  => 200,
+        'congo'   => 120, 'rdc'      => 120, 'drc'      => 120,
+        'usa'     => 400, 'états-unis'=> 400, 'etats-unis'=> 400,
+        'uk'      => 180, 'royaume-uni'=> 180,
+        'canada'  => 350,
+        'algerie' => 160, 'algérie'  => 160,
+        'tunisie' => 140, 'tunisia'  => 140,
+        'kenya'   => 130,
+        'senegal' => 140, 'sénégal'  => 140,
+    ];
+    foreach ( $map as $key => $dist ) {
+        if ( strpos( $country, $key ) !== false ) return $dist;
+    }
+    return 150; // défaut
+}
+
+// ─── Calcul CO₂ transport (ADEME fret routier : 0.062 kg CO₂/t·km) ───────────
+// Formule : (poids_kg ÷ 1000) × distance_km × 0.062 = t CO₂
+// Ex: 30 kg × 150 km → 0.030 t × 150 × 0.062 = 0.000279 t CO₂
+// Ex: 10 000 kg × 150 km → 10 t × 150 × 0.062 = 0.093 t CO₂
+function fpt_calculate_transport_co2( $poids_kg, $distance_km = null ) {
+    if ( ! $distance_km ) $distance_km = fpt_transport_distance_km();
+    $poids_t = (float) $poids_kg / 1000.0; // conversion kg → tonnes OBLIGATOIRE
+    $co2     = $poids_t * (float) $distance_km * 0.062;
+    return round( $co2, 6 ); // 6 décimales pour les petits lots
+}
+
+// ─── Facteurs CO₂ produit par le process de recyclage (t CO₂/t recyclée) ──────
+// Source : FEDEREC/ADEME ACV 2017, ADEME Base Carbone
+// Ce sont les émissions PRODUITES par le recycleur (énergie, process)
+// ≠ CO₂ évité (gain net vs primaire)
+function fpt_co2_process_factors() {
+    return [
+        // Métaux ferreux — four électrique (ADEME/FEDEREC 2017)
+        'fer'        => 1.10,  // acier recyclé : 1,10 t CO₂/t (four arc électrique)
+        'iron'       => 1.10,
+        'acier'      => 1.10,
+        'steel'      => 1.10,
+        'ferraille'  => 1.10,
+        'scrap'      => 1.10,
+        'fonte'      => 0.90,
+        'cast iron'  => 0.90,
+        'inox'       => 0.70,  // acier inox recyclé
+        'stainless'  => 0.70,
+
+        // Aluminium — affinage/refusion (ADEME Base Carbone)
+        'aluminium'  => 0.36,  // aluminium recyclé : 0,36 t CO₂/t
+        'aluminum'   => 0.36,
+        'alu'        => 0.36,
+        'canette'    => 0.36,
+        'can'        => 0.36,
+
+        // Cuivre — fusion/affinage (FEDEREC/ADEME 2017)
+        'cuivre'     => 1.304, // cuivre recyclé : 1,304 t CO₂/t
+        'copper'     => 1.304,
+        'bronze'     => 1.200,
+        'laiton'     => 1.100,
+        'brass'      => 1.100,
+
+        // Zinc, plomb, autres non ferreux
+        'zinc'       => 0.180,
+        'plomb'      => 0.080,
+        'lead'       => 0.080,
+        'etain'      => 0.300,
+        'tin'        => 0.300,
+        'nickel'     => 0.500,
+        'aluminium'  => 0.360,
+
+        // E-waste / Électronique (estimation ACV)
+        'electronique' => 1.500,
+        'electronics'  => 1.500,
+        'ewaste'       => 1.500,
+        'e-waste'      => 1.500,
+        'telephone'    => 2.000,
+        'smartphone'   => 2.000,
+        'ordinateur'   => 1.500,
+        'computer'     => 1.500,
+
+        // Batteries
+        'batterie'   => 0.900,
+        'battery'    => 0.900,
+        'lithium'    => 2.000,
+        'li-ion'     => 2.000,
+
+        // Papier / Carton (FEDEREC/ADEME 2017)
+        'papier'     => 0.870,
+        'paper'      => 0.870,
+        'carton'     => 0.870,
+        'cardboard'  => 0.870,
+
+        // Plastiques (ADEME 2024)
+        'plastique'  => 0.650,
+        'plastic'    => 0.650,
+        'pet'        => 0.650,
+        'hdpe'       => 0.600,
+
+        // Verre (ADEME Base Carbone)
+        'verre'      => 0.290,
+        'glass'      => 0.290,
+
+        // Pneus
+        'pneu'       => 0.500,
+        'tire'       => 0.500,
+
+        // Défaut conservateur
+        'default'    => 0.580,
+    ];
+}
+
+// ─── Calcul CO₂ produit par le process de recyclage ──────────────────────────
+function fpt_calculate_process_co2( $titre, $poids_kg ) {
+    $factors     = fpt_co2_process_factors();
+    $titre_lower = strtolower( remove_accents( $titre ) );
+    $factor      = $factors['default'];
+
+    foreach ( $factors as $kw => $val ) {
+        if ( $kw === 'default' ) continue;
+        if ( strpos( $titre_lower, $kw ) !== false ) {
+            $factor = $val;
+            break;
+        }
+    }
+    return round( ($poids_kg / 1000) * $factor, 6 );
+}
+
+function fpt_get_acheteurs() {
+    $slug = get_option( 'fpt_acheteurs_cat_slug', 'acheteurs' );
+    return get_posts([
+        'post_type'   => 'hp_listing',
+        'post_status' => 'publish',
+        'numberposts' => -1,
+        'tax_query'   => [[
+            'taxonomy' => 'hp_listing_category',
+            'field'    => 'slug',
+            'terms'    => $slug,
+        ]],
+        'orderby' => 'title',
+        'order'   => 'ASC',
+    ]);
+}
+
+// ─── Hook : bouton "Confirmer collecte" dans wp-admin (meta box) ──────────────
+add_action( 'add_meta_boxes', 'fpt_add_collection_metabox' );
+function fpt_add_collection_metabox() {
+    add_meta_box(
+        'fpt_collection',
+        '♻️ ' . fpt_t('Confirmer la collecte','Confirm Collection') . ' — FerayPro Tracer',
+        'fpt_collection_metabox_html',
+        'hp_listing',
+        'side',
+        'high'
+    );
+}
+
+function fpt_collection_metabox_html( $post ) {
+    $collected      = get_post_meta( $post->ID, '_fpt_collected', true );
+    $acheteur_id    = get_post_meta( $post->ID, '_fpt_acheteur_id', true );
+    $collected_date = get_post_meta( $post->ID, '_fpt_collected_date', true );
+    $poids_kg       = fpt_get_poids_kg( $post->ID );
+    $acheteurs      = fpt_get_acheteurs();
+
+    wp_nonce_field( 'fpt_collection_nonce', 'fpt_collection_nonce' );
+    ?>
+    <div style="font-family:Arial,sans-serif;font-size:13px">
+    <?php if ( $collected ) :
+        $acheteur_titre = get_the_title( $acheteur_id );
+        $co2_mat        = (float) get_post_meta( $post->ID, '_fpt_co2_avoided', true );
+        $co2_process    = fpt_calculate_process_co2( get_the_title($post->ID), $poids_kg );
+    ?>
+        <div style="background:#e6f5ee;border:1px solid #1a7a4a;border-radius:6px;padding:10px;margin-bottom:10px">
+            <strong style="color:#1a7a4a">✅ <?php echo fpt_t('Lot collecté','Batch collected'); ?></strong><br>
+            <span style="color:#555"><?php echo fpt_t('Acheteur','Buyer'); ?> : <strong><?php echo esc_html($acheteur_titre); ?></strong></span><br>
+            <span style="color:#555"><?php echo fpt_t('Date','Date'); ?> : <?php echo esc_html( date_i18n('d/m/Y', strtotime($collected_date)) ); ?></span><br>
+            <span style="color:#1a7a4a">🌱 CO₂ évité : <?php echo esc_html(number_format($co2_mat,4)); ?> t</span><br>
+            <span style="color:#e67e22">🏭 CO₂ recyclage : <?php echo esc_html(number_format($co2_process,6)); ?> t</span>
+        </div>
+        <button type="button" onclick="document.getElementById('fpt_uncollect_form').style.display='block'" 
+            style="background:#c0392b;color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px">
+            <?php echo fpt_t('Annuler la collecte','Cancel collection'); ?>
+        </button>
+        <div id="fpt_uncollect_form" style="display:none;margin-top:8px">
+            <input type="hidden" name="fpt_uncollect" value="1">
+            <button type="submit" style="background:#c0392b;color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer">
+                <?php echo fpt_t('Confirmer annulation','Confirm cancellation'); ?>
+            </button>
+        </div>
+    <?php else : ?>
+        <?php if ( $poids_kg <= 0 ) : ?>
+            <p style="color:#c0392b"><?php echo fpt_t('⚠️ Poids non renseigné — impossible de confirmer.','⚠️ Weight missing — cannot confirm.'); ?></p>
+        <?php else : ?>
+        <p style="color:#555;margin-bottom:8px"><?php echo fpt_t('Sélectionner l\'acheteur qui a collecté ce lot :','Select the buyer who collected this batch:'); ?></p>
+        <select name="fpt_acheteur_id" style="width:100%;margin-bottom:8px;padding:4px">
+            <option value=""><?php echo fpt_t('— Choisir un acheteur —','— Select a buyer —'); ?></option>
+            <?php foreach ( $acheteurs as $a ) : ?>
+                <option value="<?php echo esc_attr($a->ID); ?>"><?php echo esc_html( get_the_title($a->ID) ); ?></option>
+            <?php endforeach; ?>
+        </select>
+        <button type="submit" name="fpt_confirm_collect" value="1"
+            style="background:#1a7a4a;color:#fff;border:none;padding:8px 14px;border-radius:4px;cursor:pointer;width:100%;font-size:13px;font-weight:bold">
+            ✅ <?php echo fpt_t('Confirmer la collecte','Confirm collection'); ?>
+        </button>
+        <?php endif; ?>
+    <?php endif; ?>
+    </div>
+    <?php
+}
+
+// ─── Sauvegarder la confirmation de collecte ──────────────────────────────────
+add_action( 'save_post_hp_listing', 'fpt_save_collection', 30, 2 );
+function fpt_save_collection( $post_id, $post ) {
+    if ( ! isset($_POST['fpt_collection_nonce']) ) return;
+    if ( ! wp_verify_nonce($_POST['fpt_collection_nonce'], 'fpt_collection_nonce') ) return;
+    if ( ! current_user_can('manage_options') ) return;
+    if ( wp_is_post_revision($post_id) ) return;
+
+    // Confirmer collecte
+    if ( isset($_POST['fpt_confirm_collect']) && ! empty($_POST['fpt_acheteur_id']) ) {
+        $acheteur_id = intval($_POST['fpt_acheteur_id']);
+        $poids_kg    = fpt_get_poids_kg($post_id);
+        $co2_mat     = (float) get_post_meta($post_id, '_fpt_co2_avoided', true);
+        update_post_meta($post_id, '_fpt_collected',      1);
+        update_post_meta($post_id, '_fpt_acheteur_id',    $acheteur_id);
+        update_post_meta($post_id, '_fpt_collected_date', current_time('mysql'));
+
+        // Mettre à jour les stats — supprimé (calculé en temps réel dans le dashboard)
+    }
+
+    // Annuler collecte
+    if ( isset($_POST['fpt_uncollect']) ) {
+        $acheteur_id = get_post_meta($post_id, '_fpt_acheteur_id', true);
+        $co2_total   = (float) get_post_meta($post_id, '_fpt_co2_total', true);
+        $poids_kg    = fpt_get_poids_kg($post_id);
+
+        // Soustraire des stats acheteur
+        if ($acheteur_id) {
+            $prev_co2   = (float) get_post_meta($acheteur_id, '_fpt_buyer_co2_total', true);
+            $prev_lots  = (int)   get_post_meta($acheteur_id, '_fpt_buyer_lots_count', true);
+            $prev_poids = (float) get_post_meta($acheteur_id, '_fpt_buyer_poids_total', true);
+            update_post_meta($acheteur_id, '_fpt_buyer_co2_total',   max(0, round($prev_co2 - $co2_total, 4)));
+            update_post_meta($acheteur_id, '_fpt_buyer_lots_count',  max(0, $prev_lots - 1));
+            update_post_meta($acheteur_id, '_fpt_buyer_poids_total', max(0, $prev_poids - $poids_kg));
+        }
+
+        delete_post_meta($post_id, '_fpt_collected');
+        delete_post_meta($post_id, '_fpt_acheteur_id');
+        delete_post_meta($post_id, '_fpt_collected_date');
+        delete_post_meta($post_id, '_fpt_co2_transport');
+        delete_post_meta($post_id, '_fpt_co2_total');
+    }
+}
+
+// ─── Shortcode : Dashboard acheteur ──────────────────────────────────────────
+add_shortcode( 'fpt_acheteur', 'fpt_shortcode_acheteur' );
+function fpt_shortcode_acheteur( $atts ) {
+    $atts = shortcode_atts([ 'id' => 0 ], $atts);
+    $acheteur_id = (int) $atts['id'];
+    if ( ! $acheteur_id ) return '';
+
+    $titre     = get_the_title($acheteur_id);
+    $ville_ach = get_post_meta($acheteur_id, fpt_key_ville(), true);
+    $zones     = get_post_meta($acheteur_id, 'hp_zones', true);
+    $vehicules = get_post_meta($acheteur_id, 'hp_vehicules', true);
+
+    // ── Calcul en temps réel depuis les lots (pas de cache) ───────────────
+    $lots = get_posts([
+        'post_type'   => 'hp_listing',
+        'post_status' => 'publish',
+        'numberposts' => -1,
+        'meta_query'  => [
+            [ 'key' => '_fpt_collected',   'value' => '1',              'compare' => '=' ],
+            [ 'key' => '_fpt_acheteur_id', 'value' => $acheteur_id,     'compare' => '=' ],
+        ],
+        'orderby'  => 'meta_value',
+        'meta_key' => '_fpt_collected_date',
+        'order'    => 'DESC',
+    ]);
+
+    $lots_count  = count($lots);
+    $poids_total = 0;
+    $co2_process_total = 0;
+    foreach ($lots as $lot) {
+        $poids              = fpt_get_poids_kg($lot->ID);
+        $poids_total       += $poids;
+        $co2_process_total += fpt_calculate_process_co2(get_the_title($lot->ID), $poids);
+    }
+    $co2_produit_total = round($co2_process_total, 4);
+
+    ob_start(); ?>
+    <style>
+    .fpt-buyer-dash{font-family:'DM Sans',Arial,sans-serif;max-width:860px;margin:0 auto}
+    .fpt-buyer-header{background:#0f1c13;color:#fff;border-radius:12px;padding:24px 28px;margin-bottom:24px}
+    .fpt-buyer-header h2{font-size:22px;font-weight:700;color:#5dde8a;margin:0 0 4px}
+    .fpt-buyer-header p{font-size:13px;color:rgba(255,255,255,0.6);margin:0}
+    .fpt-buyer-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px}
+    .fpt-buyer-stat{background:#fff;border:1.5px solid #d0ddd4;border-radius:10px;padding:16px;text-align:center}
+    .fpt-buyer-stat-val{font-family:monospace;font-size:22px;font-weight:700;color:#1a7a4a;display:block}
+    .fpt-buyer-stat-lbl{font-size:11px;color:#6b8070;text-transform:uppercase;letter-spacing:.05em}
+    .fpt-buyer-lots h3{font-size:16px;font-weight:700;margin-bottom:12px;color:#0f1c13}
+    .fpt-buyer-lot{background:#fff;border:1.5px solid #d0ddd4;border-radius:10px;padding:14px 16px;margin-bottom:10px;display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}
+    .fpt-buyer-lot-title{font-weight:700;font-size:14px;color:#0f1c13;margin-bottom:3px}
+    .fpt-buyer-lot-meta{font-size:12px;color:#6b8070}
+    .fpt-buyer-lot-co2{text-align:right}
+    .fpt-buyer-lot-co2-mat{font-family:monospace;font-size:15px;font-weight:700;color:#1a7a4a}
+    .fpt-buyer-lot-co2-trans{font-size:11px;color:#6b8070}
+    .fpt-buyer-lot-co2-total{font-size:12px;font-weight:700;color:#0f1c13;border-top:1px solid #d0ddd4;padding-top:3px;margin-top:3px}
+    @media(max-width:580px){.fpt-buyer-stats{grid-template-columns:1fr 1fr}.fpt-buyer-lot{grid-template-columns:1fr}}
+    </style>
+    <div class="fpt-buyer-dash">
+        <div class="fpt-buyer-header">
+            <h2>♻️ <?php echo esc_html($titre); ?></h2>
+            <p>
+                <?php if($ville_ach) echo '📍 ' . esc_html($ville_ach) . ' · '; ?>
+                <?php if($zones) echo fpt_t('Zones : ','Zones: ') . esc_html($zones) . ' · '; ?>
+                <?php if($vehicules) echo fpt_t('Véhicules : ','Vehicles: ') . esc_html($vehicules); ?>
+            </p>
+        </div>
+
+        <div class="fpt-buyer-stats">
+            <div class="fpt-buyer-stat">
+                <span class="fpt-buyer-stat-val"><?php echo $lots_count; ?></span>
+                <span class="fpt-buyer-stat-lbl"><?php echo fpt_t('Lots collectés','Batches collected'); ?></span>
+            </div>
+            <div class="fpt-buyer-stat">
+                <span class="fpt-buyer-stat-val"><?php echo esc_html(fpt_display_weight($poids_total)); ?></span>
+                <span class="fpt-buyer-stat-lbl"><?php echo fpt_t('Poids total','Total weight'); ?></span>
+            </div>
+            <div class="fpt-buyer-stat" style="border-top:3px solid #e67e22">
+                <span class="fpt-buyer-stat-val" style="color:#e67e22"><?php echo number_format($co2_produit_total, 4); ?> t</span>
+                <span class="fpt-buyer-stat-lbl">CO₂ <?php echo fpt_t('produit (recyclage)','produced (recycling)'); ?></span>
+            </div>
+        </div>
+
+        <?php if ( empty($lots) ) : ?>
+            <p style="color:#6b8070;font-size:14px"><?php echo fpt_t('Aucun lot collecté pour l\'instant.','No batches collected yet.'); ?></p>
+        <?php else : ?>
+        <div class="fpt-buyer-lots">
+            <h3><?php echo fpt_t('Lots collectés','Collected batches'); ?></h3>
+            <?php foreach ( $lots as $lot ) :
+                $poids       = fpt_get_poids_kg($lot->ID);
+                $titre_lot   = get_the_title($lot->ID);
+                $co2_process = fpt_calculate_process_co2($titre_lot, $poids);
+                $ville_vend  = get_post_meta($lot->ID, fpt_key_ville(), true);
+                $date_col    = get_post_meta($lot->ID, '_fpt_collected_date', true);
+                $lot_id      = get_post_meta($lot->ID, '_fpt_lot_id', true);
+            ?>
+            <div class="fpt-buyer-lot">
+                <div>
+                    <div class="fpt-buyer-lot-title">
+                        <a href="<?php echo esc_url(get_permalink($lot->ID)); ?>" style="color:#0f1c13;text-decoration:none">
+                            <?php echo esc_html(get_the_title($lot->ID)); ?>
+                        </a>
+                    </div>
+                    <div class="fpt-buyer-lot-meta">
+                        <?php echo esc_html(fpt_display_weight($poids)); ?>
+                        <?php if($ville_vend) echo ' · 📍 ' . esc_html($ville_vend); ?>
+                        <?php if($date_col) echo ' · ' . date_i18n('d/m/Y', strtotime($date_col)); ?>
+                        <?php if($lot_id) echo ' · ' . esc_html($lot_id); ?>
+                    </div>
+                </div>
+                <div class="fpt-buyer-lot-co2">
+                    <div class="fpt-buyer-lot-co2-mat" style="color:#e67e22">🏭 <?php echo number_format($co2_process, 6); ?> t CO₂ <?php echo fpt_t('recyclage','recycling'); ?></div>
+                </div>
+            </div>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+
+        <p style="font-size:11px;color:#6b8070;margin-top:20px">
+            * <?php echo fpt_t(
+                'CO₂ recyclage : émissions produites par le process de recyclage (FEDEREC/ADEME ACV 2017). Gain net CO₂ = CO₂ évité − CO₂ recyclage.',
+                'CO₂ recycling: emissions produced by the recycling process (FEDEREC/ADEME LCA 2017). Net CO₂ gain = CO₂ avoided − CO₂ recycling.'
+            ); ?>
+        </p>
+    </div>
+    <?php
+    return ob_get_clean();
 }
 
 // ─── Recherche des prix du jour pour un type de déchet ───────────────────────
@@ -185,13 +696,29 @@ function fpt_inject_on_listing( $content ) {
                 <strong><?php echo fpt_t('Impact environnemental de ce lot','Environmental impact of this batch'); ?></strong>
                 <span class="fpt-inline-id"><?php echo esc_html( $lot_id ); ?></span>
             </div>
-            <div class="fpt-inline-co2"><?php echo esc_html( $co2_display ); ?></div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+                <div class="fpt-inline-co2"><?php echo esc_html( $co2_display ); ?></div>
+                <?php
+                $collected = get_post_meta($post_id, '_fpt_collected', true);
+                if ($collected) :
+                    $ach_id = get_post_meta($post_id, '_fpt_acheteur_id', true);
+                    $ach_nom = $ach_id ? get_the_title($ach_id) : '';
+                ?>
+                <span style="background:#1a7a4a;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px">
+                    ✅ <?php echo fpt_t('Collecté','Collected'); ?><?php if($ach_nom) echo ' · ' . esc_html($ach_nom); ?>
+                </span>
+                <?php else : ?>
+                <span style="background:#f59e0b;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px">
+                    ⏳ <?php echo fpt_t('En attente de collecte','Awaiting collection'); ?>
+                </span>
+                <?php endif; ?>
+            </div>
         </div>
         <div class="fpt-inline-body">
             <div class="fpt-inline-stats">
                 <div class="fpt-inline-stat">
                     <span class="fpt-inline-val"><?php echo esc_html( fpt_display_weight( $poids_kg ) ); ?></span>
-                    <span class="fpt-inline-lbl"><?php echo fpt_t('Poids collecté','Weight collected'); ?></span>
+                    <span class="fpt-inline-lbl"><?php echo fpt_t('Poids à collecter','Weight to collect'); ?></span>
                 </div>
                 <?php if ( $ville ): ?>
                 <div class="fpt-inline-stat">
@@ -312,517 +839,546 @@ define( 'FPT_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
 // ─── Facteurs CO₂ évité par tonne (source ADEME / Base Carbone) ───────────────
 function fpt_co2_factors() {
+    // ════════════════════════════════════════════════════════════════════════
+    // FACTEURS CO₂ — GAIN NET = émissions primaire − émissions recyclage
+    // Sources : ADEME Base Carbone, FEDEREC ACV 2017/2019, ADEME-Deloitte 2023
+    // Formule : CO₂ évité (t) = Poids (kg) ÷ 1000 × Facteur (t CO₂/t recyclée)
+    // ════════════════════════════════════════════════════════════════════════
     return [
 
         // ════════════════════════════════════════════════════════════════
         // MÉTAUX FERREUX / FERROUS METALS
+        // Source : FEDEREC/ADEME ACV 2017 — acier primaire 1,9 t − recyclé 0,58 t = 1,10 t net
         // ════════════════════════════════════════════════════════════════
-        'fer'              => 1.8,
-        'iron'             => 1.8,
-        'acier'            => 1.8,
-        'steel'            => 1.8,
-        'ferraille'        => 1.8,
-        'scrap'            => 1.8,
-        'scrap metal'      => 1.8,
-        'fonte'            => 1.6,
-        'cast iron'        => 1.6,
-        'inox'             => 2.5,
-        'stainless'        => 2.5,
-        'acier inox'       => 2.5,
-        'stainless steel'  => 2.5,
-        'tournure'         => 1.8,
-        'shavings'         => 1.8,
-        'turnings'         => 1.8,
-        'copeau'           => 1.8,
-        'chips'            => 1.8,
-        'limaille'         => 1.8,
-        'filings'          => 1.8,
-        'radiateur'        => 1.8,
-        'radiator'         => 1.8,
-        'ressort'          => 1.8,
-        'spring'           => 1.8,
-        'blindage'         => 1.8,
-        'armor'            => 1.8,
-        'poutrelle'        => 1.8,
-        'beam'             => 1.8,
-        'profilé'          => 1.8,
-        'profile'          => 1.8,
-        'tole'             => 1.8,
-        'tôle'             => 1.8,
-        'sheet metal'      => 1.8,
-        'tube acier'       => 1.8,
-        'steel pipe'       => 1.8,
-        'rail'             => 1.8,
-        'rebar'            => 1.8,
-        'fer à béton'      => 1.8,
-        'fer beton'        => 1.8,
-        'reinforcing bar'  => 1.8,
-        'chaudière'        => 1.8,
-        'chaudiere'        => 1.8,
-        'boiler'           => 1.8,
-        'reservoir'        => 1.8,
-        'réservoir'        => 1.8,
-        'tank'             => 1.8,
-        'cuve'             => 1.8,
-        'vat'              => 1.8,
-        'conteneur'        => 1.8,
-        'container'        => 1.8,
-        'chassis'          => 1.8,
-        'châssis'          => 1.8,
-        'frame'            => 1.8,
-        'essieu'           => 1.8,
-        'axle'             => 1.8,
-        'vilebrequin'      => 1.8,
-        'crankshaft'       => 1.8,
-        'bielle'           => 1.8,
-        'connecting rod'   => 1.8,
-        'engrenage'        => 1.8,
-        'gear'             => 1.8,
-        'roulement'        => 1.8,
-        'bearing'          => 1.8,
-        'arbre'            => 1.8,
-        'shaft'            => 1.8,
-        'ancre'            => 1.8,
-        'anchor'           => 1.8,
-        'chaine'           => 1.8,
-        'chaîne'           => 1.8,
-        'chain'            => 1.8,
+        'fer'              => 1.10,
+        'iron'             => 1.10,
+        'acier'            => 1.10,
+        'steel'            => 1.10,
+        'ferraille'        => 1.10,
+        'scrap'            => 1.10,
+        'scrap metal'      => 1.10,
+        'fonte'            => 0.90,   // fonte : gain légèrement inférieur à l'acier
+        'cast iron'        => 0.90,
+        'inox'             => 2.10,   // inox : primaire ~2,8 − recyclé ~0,7
+        'stainless'        => 2.10,
+        'acier inox'       => 2.10,
+        'stainless steel'  => 2.10,
+        'tournure'         => 1.10,
+        'shavings'         => 1.10,
+        'turnings'         => 1.10,
+        'copeau'           => 1.10,
+        'chips'            => 1.10,
+        'limaille'         => 1.10,
+        'filings'          => 1.10,
+        'radiateur'        => 1.10,
+        'radiator'         => 1.10,
+        'ressort'          => 1.10,
+        'spring'           => 1.10,
+        'blindage'         => 1.10,
+        'armor'            => 1.10,
+        'poutrelle'        => 1.10,
+        'beam'             => 1.10,
+        'profilé'          => 1.10,
+        'profile'          => 1.10,
+        'tole'             => 1.10,
+        'tôle'             => 1.10,
+        'sheet metal'      => 1.10,
+        'tube acier'       => 1.10,
+        'steel pipe'       => 1.10,
+        'rail'             => 1.10,
+        'rebar'            => 1.10,
+        'fer à béton'      => 1.10,
+        'fer beton'        => 1.10,
+        'reinforcing bar'  => 1.10,
+        'chaudière'        => 1.10,
+        'chaudiere'        => 1.10,
+        'boiler'           => 1.10,
+        'reservoir'        => 1.10,
+        'réservoir'        => 1.10,
+        'tank'             => 1.10,
+        'cuve'             => 1.10,
+        'vat'              => 1.10,
+        'conteneur'        => 1.10,
+        'container'        => 1.10,
+        'chassis'          => 1.10,
+        'châssis'          => 1.10,
+        'frame'            => 1.10,
+        'essieu'           => 1.10,
+        'axle'             => 1.10,
+        'vilebrequin'      => 1.10,
+        'crankshaft'       => 1.10,
+        'bielle'           => 1.10,
+        'connecting rod'   => 1.10,
+        'engrenage'        => 1.10,
+        'gear'             => 1.10,
+        'roulement'        => 1.10,
+        'bearing'          => 1.10,
+        'arbre'            => 1.10,
+        'shaft'            => 1.10,
+        'ancre'            => 1.10,
+        'anchor'           => 1.10,
+        'chaine'           => 1.10,
+        'chaîne'           => 1.10,
+        'chain'            => 1.10,
 
         // ════════════════════════════════════════════════════════════════
-        // MÉTAUX NON FERREUX
+        // MÉTAUX NON FERREUX / NON-FERROUS METALS
         // ════════════════════════════════════════════════════════════════
-        'aluminium'        => 9.5,
-        'alu'              => 9.5,
-        'profilé alu'      => 9.5,
-        'canette'          => 9.5,
-        'cuivre'           => 3.5,
-        'bronze'           => 3.2,
-        'laiton'           => 3.0,
-        'zinc'             => 2.0,
-        'plomb'            => 1.2,
-        'lead'             => 1.2,
-        'etain'            => 4.0,
-        'étain'            => 4.0,
-        'tin'              => 4.0,
-        'nickel'           => 6.5,
-        'titane'           => 5.0,
-        'titanium'         => 5.0,
-        'magnesium'        => 7.0,
-        'magnésium'        => 7.0,
-        'chrome'           => 3.0,
-        'chromium'         => 3.0,
-        'tungstene'        => 3.5,
-        'tungstène'        => 3.5,
-        'tungsten'         => 3.5,
-        'carbure'          => 3.5,
-        'carbide'          => 3.5,
-        'cobalt'           => 8.0,
-        'bismuth'          => 2.5,
-        'antimoine'        => 2.0,
-        'antimony'         => 2.0,
-        'cadmium'          => 3.0,
-        'indium'           => 5.0,
-        'gallium'          => 5.0,
-        'germanium'        => 5.0,
-        'palladium'        => 10.0,
-        'platine'          => 12.0,
-        'platinum'         => 12.0,
-        'argent'           => 8.0,
-        'silver'           => 8.0,
-        'or'               => 15.0,
-        'gold'             => 15.0,
-        'molybdene'        => 4.0,
-        'molybdène'        => 4.0,
-        'molybdenum'       => 4.0,
-        'vanadium'         => 4.5,
-        'manganèse'        => 2.5,
-        'manganese'        => 2.5,
-        'copper'           => 3.5,
-        'bronze'           => 3.2,
-        'brass'            => 3.0,
-        'aluminum'         => 9.5,
-        'aluminium'        => 9.5,
-        'alu'              => 9.5,
-        'can'              => 9.5,
+
+        // Aluminium : primaire 7,24 t − recyclé 0,36 t = 6,88 t net
+        // Source : ADEME Base Carbone — "aluminium recyclé émet 20× moins" (ADEME 2024)
+        'aluminium'        => 6.88,
+        'aluminum'         => 6.88,
+        'alu'              => 6.88,
+        'profilé alu'      => 6.88,
+        'aluminum profile' => 6.88,
+        'canette'          => 6.88,
+        'can'              => 6.88,
+        'aluminum can'     => 6.88,
+
+        // Cuivre : primaire 1,445 t − recyclé 1,304 t = 0,141 t net
+        // Source : FEDEREC/ADEME ACV 2017, confirmé évaluateur indépendant 2026
+        'cuivre'           => 0.141,
+        'copper'           => 0.141,
+
+        // Bronze : alliage cuivre/étain — gain estimé ~0,12 t/t
+        'bronze'           => 0.120,
+
+        // Laiton : alliage cuivre/zinc — gain estimé ~0,10 t/t
+        'laiton'           => 0.100,
+        'brass'            => 0.100,
+
+        // Zinc : primaire ~0,9 t − recyclé ~0,18 t = 0,72 t net
+        'zinc'             => 0.720,
+
+        // Plomb : primaire ~0,5 t − recyclé ~0,08 t = 0,42 t net
+        'plomb'            => 0.420,
+        'lead'             => 0.420,
+
+        // Étain : gain estimé ~1,5 t/t (procédé énergivore)
+        'etain'            => 1.50,
+        'étain'            => 1.50,
+        'tin'              => 1.50,
+
+        // Nickel : primaire ~6,5 t − recyclé ~0,5 t = 6,0 t net
+        'nickel'           => 6.00,
+
+        // Titane : gain estimé ~4,0 t/t
+        'titane'           => 4.00,
+        'titanium'         => 4.00,
+
+        // Magnésium : primaire ~10 t − recyclé ~1,0 t = 9,0 t net
+        'magnesium'        => 9.00,
+        'magnésium'        => 9.00,
+
+        // Chrome : gain estimé ~2,0 t/t
+        'chrome'           => 2.00,
+        'chromium'         => 2.00,
+
+        // Tungstène/Carbure
+        'tungstene'        => 3.00,
+        'tungstène'        => 3.00,
+        'tungsten'         => 3.00,
+        'carbure'          => 3.00,
+        'carbide'          => 3.00,
+
+        // Cobalt : gain estimé ~7,0 t/t
+        'cobalt'           => 7.00,
+
+        // Bismuth, antimoine
+        'bismuth'          => 2.00,
+        'antimoine'        => 1.50,
+        'antimony'         => 1.50,
+
+        // Cadmium, indium, gallium, germanium
+        'cadmium'          => 2.50,
+        'indium'           => 4.00,
+        'gallium'          => 4.00,
+        'germanium'        => 4.00,
+
+        // Métaux précieux — gains très élevés (extraction minière intensive)
+        'palladium'        => 9.00,
+        'platine'          => 11.00,
+        'platinum'         => 11.00,
+        'argent'           => 7.00,
+        'silver'           => 7.00,
+        'or'               => 14.00,
+        'gold'             => 14.00,
+
+        // Molybdène, vanadium, manganèse
+        'molybdene'        => 3.50,
+        'molybdène'        => 3.50,
+        'molybdenum'       => 3.50,
+        'vanadium'         => 4.00,
+        'manganèse'        => 2.00,
+        'manganese'        => 2.00,
 
         // ════════════════════════════════════════════════════════════════
         // VÉHICULES & PIÈCES AUTO / VEHICLES & AUTO PARTS
         // ════════════════════════════════════════════════════════════════
-        'vehicule'         => 1.8,
-        'véhicule'         => 1.8,
-        'vehicle'          => 1.8,
-        'end-of-life'      => 1.8,
-        'end of life'      => 1.8,
-        'salvage'          => 1.8,
-        'junk car'         => 1.8,
-        'voiture'          => 1.8,
-        'car'              => 1.8,
-        'camion'           => 1.8,
-        'truck'            => 1.8,
-        'camionnette'      => 1.8,
-        'van'              => 1.8,
-        'bus'              => 1.8,
-        'autobus'          => 1.8,
-        'tracteur'         => 1.8,
-        'tractor'          => 1.8,
-        'engin'            => 1.8,
-        'moto'             => 1.8,
-        'motorcycle'       => 1.8,
-        'motocycle'        => 1.8,
-        'scooter'          => 1.8,
-        'velo'             => 1.8,
-        'vélo'             => 1.8,
-        'bicycle'          => 1.8,
-        'bike'             => 1.8,
-        'moteur'           => 2.2,
-        'motor'            => 2.2,
-        'engine'           => 2.2,
-        'alternateur'      => 2.5,
-        'alternator'       => 2.5,
-        'demarreur'        => 2.2,
-        'démarreur'        => 2.2,
-        'starter'          => 2.2,
-        'boite'            => 1.8,
-        'boîte'            => 1.8,
-        'gearbox'          => 1.8,
-        'transmission'     => 1.8,
-        'pont'             => 1.8,
-        'axle'             => 1.8,
-        'jante'            => 9.5,
-        'rim'              => 9.5,
-        'wheel'            => 9.5,
-        'carter'           => 1.8,
-        'casing'           => 1.8,
-        'culasse'          => 1.8,
-        'cylinder head'    => 1.8,
-        'bloc moteur'      => 1.8,
-        'engine block'     => 1.8,
-        'turbo'            => 2.0,
-        'turbocompresseur' => 2.0,
-        'turbocharger'     => 2.0,
-        'compresseur'      => 2.0,
-        'compressor'       => 2.0,
-        'pompe'            => 2.0,
-        'pump'             => 2.0,
-        'amortisseur'      => 1.8,
-        'shock absorber'   => 1.8,
-        'suspension'       => 1.8,
-        'direction'        => 1.8,
-        'steering'         => 1.8,
-        'frein'            => 1.8,
-        'brake'            => 1.8,
-        'disque'           => 1.8,
-        'disc'             => 1.8,
-        'carrosserie'      => 1.8,
-        'body'             => 1.8,
-        'bodywork'         => 1.8,
-        'pare choc'        => 1.5,
-        'pare-choc'        => 1.5,
-        'bumper'           => 1.5,
-        'capot'            => 1.8,
-        'hood'             => 1.8,
-        'bonnet'           => 1.8,
-        'portière'         => 1.8,
-        'portiere'         => 1.8,
-        'door'             => 1.8,
-        'pot echappement'  => 1.8,
-        'exhaust'          => 1.8,
-        'muffler'          => 1.8,
-        'catalyseur'       => 5.0,
-        'catalytic'        => 5.0,
-        'catalyst'         => 5.0,
+        'vehicule'         => 1.10,   // VHU : majoritairement acier
+        'véhicule'         => 1.10,
+        'vehicle'          => 1.10,
+        'end-of-life'      => 1.10,
+        'end of life'      => 1.10,
+        'salvage'          => 1.10,
+        'junk car'         => 1.10,
+        'voiture'          => 1.10,
+        'car'              => 1.10,
+        'camion'           => 1.10,
+        'truck'            => 1.10,
+        'camionnette'      => 1.10,
+        'van'              => 1.10,
+        'bus'              => 1.10,
+        'autobus'          => 1.10,
+        'tracteur'         => 1.10,
+        'tractor'          => 1.10,
+        'engin'            => 1.10,
+        'moto'             => 1.10,
+        'motorcycle'       => 1.10,
+        'motocycle'        => 1.10,
+        'scooter'          => 1.10,
+        'velo'             => 1.10,
+        'vélo'             => 1.10,
+        'bicycle'          => 1.10,
+        'bike'             => 1.10,
+        'moteur'           => 1.50,   // moteur = acier + cuivre mixte
+        'motor'            => 1.50,
+        'engine'           => 1.50,
+        'alternateur'      => 2.00,   // bobinage cuivre dominant
+        'alternator'       => 2.00,
+        'demarreur'        => 1.50,
+        'démarreur'        => 1.50,
+        'starter'          => 1.50,
+        'boite'            => 1.10,
+        'boîte'            => 1.10,
+        'gearbox'          => 1.10,
+        'transmission'     => 1.10,
+        'pont'             => 1.10,
+        'jante'            => 6.88,   // jantes alu
+        'rim'              => 6.88,
+        'wheel'            => 6.88,
+        'carter'           => 1.10,
+        'casing'           => 1.10,
+        'culasse'          => 1.10,
+        'cylinder head'    => 1.10,
+        'bloc moteur'      => 1.10,
+        'engine block'     => 1.10,
+        'turbo'            => 1.50,
+        'turbocompresseur' => 1.50,
+        'turbocharger'     => 1.50,
+        'compresseur'      => 1.50,
+        'compressor'       => 1.50,
+        'pompe'            => 1.50,
+        'pump'             => 1.50,
+        'amortisseur'      => 1.10,
+        'shock absorber'   => 1.10,
+        'suspension'       => 1.10,
+        'direction'        => 1.10,
+        'steering'         => 1.10,
+        'frein'            => 1.10,
+        'brake'            => 1.10,
+        'disque'           => 1.10,
+        'disc'             => 1.10,
+        'carrosserie'      => 1.10,
+        'body'             => 1.10,
+        'bodywork'         => 1.10,
+        'pare choc'        => 1.00,
+        'pare-choc'        => 1.00,
+        'bumper'           => 1.00,
+        'capot'            => 1.10,
+        'hood'             => 1.10,
+        'bonnet'           => 1.10,
+        'portière'         => 1.10,
+        'portiere'         => 1.10,
+        'door'             => 1.10,
+        'pot echappement'  => 1.10,
+        'exhaust'          => 1.10,
+        'muffler'          => 1.10,
+        'catalyseur'       => 4.50,   // platine + palladium + rhodium
+        'catalytic'        => 4.50,
+        'catalyst'         => 4.50,
 
         // ════════════════════════════════════════════════════════════════
-        // ÉLECTRONIQUE & E-WASTE / ELECTRONICS & E-WASTE
+        // ÉLECTRONIQUE & E-WASTE
+        // Gain estimé ~3-4 t/t (densité métaux précieux + cuivre)
         // ════════════════════════════════════════════════════════════════
-        'electronique'     => 4.0,
-        'électronique'     => 4.0,
-        'electronics'      => 4.0,
-        'electronic'       => 4.0,
-        'ewaste'           => 4.0,
-        'e-waste'          => 4.0,
-        'weee'             => 4.0,
-        'deee'             => 4.0,
-        'electrique'       => 3.5,
-        'électrique'       => 3.5,
-        'electric'         => 3.5,
-        'electrical'       => 3.5,
-        'ordinateur'       => 4.0,
-        'computer'         => 4.0,
-        'laptop'           => 4.0,
-        'desktop'          => 4.0,
-        'pc'               => 4.0,
-        'serveur'          => 4.0,
-        'server'           => 4.0,
-        'telephone'        => 4.5,
-        'téléphone'        => 4.5,
-        'phone'            => 4.5,
-        'smartphone'       => 4.5,
-        'cellphone'        => 4.5,
-        'mobile'           => 4.5,
-        'gsm'              => 4.5,
-        'tablette'         => 4.0,
-        'tablet'           => 4.0,
-        'imprimante'       => 3.5,
-        'printer'          => 3.5,
-        'photocopieur'     => 3.5,
-        'copier'           => 3.5,
-        'scanner'          => 3.5,
-        'ecran'            => 3.5,
-        'écran'            => 3.5,
-        'screen'           => 3.5,
-        'monitor'          => 3.5,
-        'moniteur'         => 3.5,
-        'television'       => 3.5,
-        'télévision'       => 3.5,
-        'tv'               => 3.5,
-        'cable'            => 3.0,
-        'câble'            => 3.0,
-        'wire'             => 3.0,
-        'wiring'           => 3.0,
-        'fil'              => 3.0,
-        'transformateur'   => 3.0,
-        'transformer'      => 3.0,
-        'condensateur'     => 3.5,
-        'capacitor'        => 3.5,
-        'carte'            => 4.0,
-        'board'            => 4.0,
-        'motherboard'      => 4.0,
-        'circuit'          => 4.0,
-        'processeur'       => 4.5,
-        'processor'        => 4.5,
-        'cpu'              => 4.5,
-        'gpu'              => 4.5,
-        'disque dur'       => 4.0,
-        'hard drive'       => 4.0,
-        'hard disk'        => 4.0,
-        'clavier'          => 3.0,
-        'keyboard'         => 3.0,
-        'souris'           => 3.0,
-        'mouse'            => 3.0,
-        'chargeur'         => 3.0,
-        'charger'          => 3.0,
-        'adaptateur'       => 3.0,
-        'adapter'          => 3.0,
-        'onduleur'         => 3.0,
-        'ups'              => 3.0,
-        'groupe electrogene' => 2.0,
-        'generator'        => 2.0,
-        'generateur'       => 2.0,
-        'générateur'       => 2.0,
-        'climatiseur'      => 3.5,
-        'climatisation'    => 3.5,
-        'air conditioner'  => 3.5,
-        'ac unit'          => 3.5,
-        'refrigerateur'    => 3.0,
-        'réfrigérateur'    => 3.0,
-        'refrigerator'     => 3.0,
-        'fridge'           => 3.0,
-        'frigo'            => 3.0,
-        'congelateur'      => 3.0,
-        'congélateur'      => 3.0,
-        'freezer'          => 3.0,
-        'lave linge'       => 2.5,
-        'lave-linge'       => 2.5,
-        'washing machine'  => 2.5,
-        'washer'           => 2.5,
-        'machine a laver'  => 2.5,
-        'seche linge'      => 2.5,
-        'sèche-linge'      => 2.5,
-        'dryer'            => 2.5,
-        'lave vaisselle'   => 2.5,
-        'lave-vaisselle'   => 2.5,
-        'dishwasher'       => 2.5,
-        'four'             => 2.0,
-        'oven'             => 2.0,
-        'micro onde'       => 3.0,
-        'micro-onde'       => 3.0,
-        'microwave'        => 3.0,
-        'aspirateur'       => 2.5,
-        'vacuum'           => 2.5,
-        'ventilateur'      => 2.5,
-        'fan'              => 2.5,
-        'pompe chaleur'    => 3.5,
-        'heat pump'        => 3.5,
-        'panneau solaire'  => 3.0,
-        'solar panel'      => 3.0,
-        'photovoltaique'   => 3.0,
-        'photovoltaïque'   => 3.0,
-        'photovoltaic'     => 3.0,
+        'electronique'     => 3.50,
+        'électronique'     => 3.50,
+        'electronics'      => 3.50,
+        'electronic'       => 3.50,
+        'ewaste'           => 3.50,
+        'e-waste'          => 3.50,
+        'weee'             => 3.50,
+        'deee'             => 3.50,
+        'electrique'       => 2.00,
+        'électrique'       => 2.00,
+        'electric'         => 2.00,
+        'electrical'       => 2.00,
+        'ordinateur'       => 3.50,
+        'computer'         => 3.50,
+        'laptop'           => 3.50,
+        'desktop'          => 3.50,
+        'pc'               => 3.50,
+        'serveur'          => 3.50,
+        'server'           => 3.50,
+        'telephone'        => 4.00,
+        'téléphone'        => 4.00,
+        'phone'            => 4.00,
+        'smartphone'       => 4.00,
+        'cellphone'        => 4.00,
+        'mobile'           => 4.00,
+        'gsm'              => 4.00,
+        'tablette'         => 3.50,
+        'tablet'           => 3.50,
+        'imprimante'       => 3.00,
+        'printer'          => 3.00,
+        'photocopieur'     => 3.00,
+        'copier'           => 3.00,
+        'scanner'          => 3.00,
+        'ecran'            => 3.00,
+        'écran'            => 3.00,
+        'screen'           => 3.00,
+        'monitor'          => 3.00,
+        'moniteur'         => 3.00,
+        'television'       => 3.00,
+        'télévision'       => 3.00,
+        'tv'               => 3.00,
+        'cable'            => 0.50,   // câble cuivre : gain net cuivre ~0,14 + gaine plastique
+        'câble'            => 0.50,
+        'wire'             => 0.50,
+        'wiring'           => 0.50,
+        'fil'              => 0.50,
+        'transformateur'   => 2.00,
+        'transformer'      => 2.00,
+        'condensateur'     => 3.00,
+        'capacitor'        => 3.00,
+        'carte'            => 3.50,
+        'board'            => 3.50,
+        'motherboard'      => 3.50,
+        'circuit'          => 3.50,
+        'processeur'       => 4.00,
+        'processor'        => 4.00,
+        'cpu'              => 4.00,
+        'gpu'              => 4.00,
+        'disque dur'       => 3.00,
+        'hard drive'       => 3.00,
+        'hard disk'        => 3.00,
+        'clavier'          => 2.50,
+        'keyboard'         => 2.50,
+        'souris'           => 2.50,
+        'mouse'            => 2.50,
+        'chargeur'         => 2.00,
+        'charger'          => 2.00,
+        'adaptateur'       => 2.00,
+        'adapter'          => 2.00,
+        'onduleur'         => 2.50,
+        'ups'              => 2.50,
+        'groupe electrogene' => 1.50,
+        'generator'        => 1.50,
+        'generateur'       => 1.50,
+        'générateur'       => 1.50,
+        'climatiseur'      => 2.00,   // cuivre + alu + gaz réfrigérant
+        'climatisation'    => 2.00,
+        'air conditioner'  => 2.00,
+        'ac unit'          => 2.00,
+        'refrigerateur'    => 1.80,
+        'réfrigérateur'    => 1.80,
+        'refrigerator'     => 1.80,
+        'fridge'           => 1.80,
+        'frigo'            => 1.80,
+        'congelateur'      => 1.80,
+        'congélateur'      => 1.80,
+        'freezer'          => 1.80,
+        'lave linge'       => 1.50,
+        'lave-linge'       => 1.50,
+        'washing machine'  => 1.50,
+        'washer'           => 1.50,
+        'machine a laver'  => 1.50,
+        'seche linge'      => 1.50,
+        'sèche-linge'      => 1.50,
+        'dryer'            => 1.50,
+        'lave vaisselle'   => 1.50,
+        'lave-vaisselle'   => 1.50,
+        'dishwasher'       => 1.50,
+        'four'             => 1.20,
+        'oven'             => 1.20,
+        'micro onde'       => 1.50,
+        'micro-onde'       => 1.50,
+        'microwave'        => 1.50,
+        'aspirateur'       => 1.50,
+        'vacuum'           => 1.50,
+        'ventilateur'      => 1.50,
+        'fan'              => 1.50,
+        'pompe chaleur'    => 2.00,
+        'heat pump'        => 2.00,
+        'panneau solaire'  => 2.00,   // silicium + argent + alu
+        'solar panel'      => 2.00,
+        'photovoltaique'   => 2.00,
+        'photovoltaïque'   => 2.00,
+        'photovoltaic'     => 2.00,
 
         // ════════════════════════════════════════════════════════════════
-        // BATTERIES & STOCKAGE ÉNERGIE / BATTERIES & ENERGY STORAGE
+        // BATTERIES / BATTERIES
         // ════════════════════════════════════════════════════════════════
-        'batterie'         => 2.5,
-        'battery'          => 2.5,
-        'batteries'        => 2.5,
-        'accumulateur'     => 2.5,
-        'pile'             => 2.5,
-        'batterie lithium' => 5.0,
-        'lithium battery'  => 5.0,
-        'lithium'          => 5.0,
-        'li-ion'           => 5.0,
-        'batterie plomb'   => 2.5,
-        'lead battery'     => 2.5,
-        'car battery'      => 2.5,
-        'batterie voiture' => 2.5,
+        'batterie'         => 1.80,   // plomb-acide : plomb recyclé gain ~0,42 + acier
+        'battery'          => 1.80,
+        'batteries'        => 1.80,
+        'accumulateur'     => 1.80,
+        'pile'             => 1.50,
+        'batterie lithium' => 4.00,   // Li, Co, Ni — gains élevés
+        'lithium battery'  => 4.00,
+        'lithium'          => 4.00,
+        'li-ion'           => 4.00,
+        'batterie plomb'   => 0.90,   // gain net plomb ~0,42 × teneur ~50% + acier
+        'lead battery'     => 0.90,
+        'car battery'      => 0.90,
+        'batterie voiture' => 0.90,
 
         // ════════════════════════════════════════════════════════════════
-        // PAPIER & CARTON / PAPER & CARDBOARD
+        // PAPIER & CARTON
+        // Source : FEDEREC/ADEME ACV 2017 — papier primaire ~0,92 t − recyclé ~0,87 t = 0,05 t net
+        // Note : gain CO₂ faible mais économie d'eau et de bois très significative
         // ════════════════════════════════════════════════════════════════
-        'papier'           => 0.9,
-        'paper'            => 0.9,
-        'carton'           => 0.9,
-        'cardboard'        => 0.9,
-        'journal'          => 0.9,
-        'newspaper'        => 0.9,
-        'archive'          => 0.9,
-        'livre'            => 0.9,
-        'book'             => 0.9,
-        'magazine'         => 0.9,
-        'emballage'        => 0.9,
-        'packaging'        => 0.9,
-        'ondule'           => 0.9,
-        'ondulé'           => 0.9,
-        'corrugated'       => 0.9,
-        'magazine'         => 0.9,
-        'emballage'        => 0.9,
-        'papier craft'     => 0.9,
-        'ondule'           => 0.9,
-        'ondulé'           => 0.9,
+        'papier'           => 0.050,
+        'paper'            => 0.050,
+        'carton'           => 0.050,
+        'cardboard'        => 0.050,
+        'journal'          => 0.050,
+        'newspaper'        => 0.050,
+        'archive'          => 0.050,
+        'livre'            => 0.050,
+        'book'             => 0.050,
+        'magazine'         => 0.050,
+        'emballage'        => 0.050,
+        'packaging'        => 0.050,
+        'ondule'           => 0.050,
+        'ondulé'           => 0.050,
+        'corrugated'       => 0.050,
 
         // ════════════════════════════════════════════════════════════════
         // PLASTIQUES
+        // Source : ADEME 2024 — 1 t plastique recyclé économise 2,7 t CO₂
+        // Gain net PET : primaire ~2,15 − recyclé ~0,65 = 1,50 t/t
         // ════════════════════════════════════════════════════════════════
-        'plastique'        => 1.5,
-        'pet'              => 1.5,   // bouteilles
-        'hdpe'             => 1.4,   // bidons
-        'pvc'              => 1.3,
-        'polypropylene'    => 1.5,
-        'polypropylène'    => 1.5,
-        'pp'               => 1.5,
-        'polyethylene'     => 1.4,
-        'polyéthylène'     => 1.4,
-        'pe'               => 1.4,
-        'polystyrene'      => 1.6,
-        'polystyrène'      => 1.6,
-        'ps'               => 1.6,
-        'abs'              => 1.5,
-        'nylon'            => 1.8,
-        'polyamide'        => 1.8,
-        'caoutchouc'       => 1.2,
-        'latex'            => 1.2,
-        'silicone'         => 1.3,
-        'fibre de verre'   => 1.0,
-        'composite'        => 1.2,
+        'plastique'        => 1.50,
+        'plastic'          => 1.50,
+        'pet'              => 1.50,
+        'hdpe'             => 1.40,
+        'pvc'              => 0.80,   // PVC : gain plus faible (chlore)
+        'polypropylene'    => 1.50,
+        'polypropylène'    => 1.50,
+        'pp'               => 1.50,
+        'polyethylene'     => 1.40,
+        'polyéthylène'     => 1.40,
+        'pe'               => 1.40,
+        'polystyrene'      => 1.30,
+        'polystyrène'      => 1.30,
+        'ps'               => 1.30,
+        'abs'              => 1.40,
+        'nylon'            => 1.60,
+        'polyamide'        => 1.60,
+        'caoutchouc'       => 0.80,
+        'latex'            => 0.80,
+        'silicone'         => 0.90,
+        'fibre de verre'   => 0.70,
+        'composite'        => 0.80,
 
         // ════════════════════════════════════════════════════════════════
         // PNEUMATIQUES & CAOUTCHOUC
         // ════════════════════════════════════════════════════════════════
-        'pneu'             => 1.2,
-        'pneumatique'      => 1.2,
-        'chambre air'      => 1.2,
-        'chambre à air'    => 1.2,
-        'courroie'         => 1.2,
-        'joint'            => 1.2,
-        'tuyau'            => 1.2,
+        'pneu'             => 0.80,
+        'pneumatique'      => 0.80,
+        'tire'             => 0.80,
+        'rubber'           => 0.80,
+        'chambre air'      => 0.80,
+        'chambre à air'    => 0.80,
+        'courroie'         => 0.80,
+        'joint'            => 0.60,
+        'tuyau'            => 0.60,
 
         // ════════════════════════════════════════════════════════════════
         // VERRE
+        // Source : ADEME Base Carbone — primaire 0,53 − recyclé 0,29 = 0,24 t/t
         // ════════════════════════════════════════════════════════════════
-        'verre'            => 0.3,
-        'bouteille verre'  => 0.3,
-        'vitre'            => 0.3,
-        'pare brise'       => 0.3,
-        'pare-brise'       => 0.3,
-        'miroir'           => 0.3,
+        'verre'            => 0.240,
+        'glass'            => 0.240,
+        'bouteille verre'  => 0.240,
+        'vitre'            => 0.240,
+        'pare brise'       => 0.240,
+        'pare-brise'       => 0.240,
+        'miroir'           => 0.240,
 
         // ════════════════════════════════════════════════════════════════
         // TEXTILES & CUIR
         // ════════════════════════════════════════════════════════════════
-        'textile'          => 0.5,
-        'tissu'            => 0.5,
-        'vetement'         => 0.5,
-        'vêtement'         => 0.5,
-        'chiffon'          => 0.5,
-        'laine'            => 0.5,
-        'coton'            => 0.5,
-        'cuir'             => 0.6,
-        'sac'              => 0.5,
-        'chaussure'        => 0.6,
+        'textile'          => 0.40,
+        'tissu'            => 0.40,
+        'vetement'         => 0.40,
+        'vêtement'         => 0.40,
+        'chiffon'          => 0.40,
+        'clothing'         => 0.40,
+        'laine'            => 0.40,
+        'coton'            => 0.40,
+        'cuir'             => 0.50,
+        'leather'          => 0.50,
+        'sac'              => 0.40,
+        'chaussure'        => 0.50,
 
         // ════════════════════════════════════════════════════════════════
         // BOIS & DÉRIVÉS
         // ════════════════════════════════════════════════════════════════
-        'bois'             => 0.4,
-        'palette'          => 0.4,
-        'meuble'           => 0.4,
-        'contreplaque'     => 0.4,
-        'contreplaqué'     => 0.4,
-        'mdf'              => 0.4,
-        'sciure'           => 0.4,
-        'copeaux bois'     => 0.4,
+        'bois'             => 0.30,
+        'wood'             => 0.30,
+        'palette'          => 0.30,
+        'pallet'           => 0.30,
+        'meuble'           => 0.30,
+        'furniture'        => 0.30,
+        'contreplaque'     => 0.30,
+        'contreplaqué'     => 0.30,
+        'mdf'              => 0.30,
+        'sciure'           => 0.20,
+        'copeaux bois'     => 0.20,
 
         // ════════════════════════════════════════════════════════════════
-        // DÉCHETS INDUSTRIELS SPÉCIAUX
+        // DÉCHETS INDUSTRIELS
         // ════════════════════════════════════════════════════════════════
-        'huile'            => 2.5,   // huile moteur recyclée
-        'lubrifiant'       => 2.5,
-        'solvant'          => 1.5,
-        'acide'            => 1.0,
-        'peinture'         => 1.2,
-        'encre'            => 1.5,
-        'resine'           => 1.3,
-        'résine'           => 1.3,
-        'ciment'           => 0.2,
-        'beton'            => 0.2,
-        'béton'            => 0.2,
-        'gravat'           => 0.1,
-        'dechet chantier'  => 0.2,
-        'déchet chantier'  => 0.2,
-        'amiante'          => 0.5,
-        'fibrociment'      => 0.3,
+        'huile'            => 1.50,   // huile moteur recyclée vs vierge
+        'lubrifiant'       => 1.50,
+        'solvant'          => 1.00,
+        'peinture'         => 0.80,
+        'ciment'           => 0.15,
+        'beton'            => 0.10,
+        'béton'            => 0.10,
+        'gravat'           => 0.05,
 
         // ════════════════════════════════════════════════════════════════
-        // DÉCHETS ORGANIQUES & BIOMASSE
+        // ÉQUIPEMENTS INDUSTRIELS (mixte acier/cuivre)
         // ════════════════════════════════════════════════════════════════
-        'organique'        => 0.3,
-        'alimentaire'      => 0.3,
-        'biomasse'         => 0.3,
-        'compost'          => 0.3,
-        'dechets verts'    => 0.3,
-        'déchets verts'    => 0.3,
+        'machine'          => 1.20,
+        'machine outil'    => 1.20,
+        'tour'             => 1.20,
+        'fraiseuse'        => 1.20,
+        'presse'           => 1.10,
+        'grue'             => 1.10,
+        'chariot'          => 1.10,
+        'elevateur'        => 1.10,
+        'élévateur'        => 1.10,
+        'convoyeur'        => 1.10,
+        'echangeur'        => 1.50,   // échangeur thermique cuivre/inox
+        'échangeur'        => 1.50,
+        'tuyauterie'       => 1.00,
+        'robinetterie'     => 0.80,   // laiton/bronze — gain net faible
+        'vanne'            => 0.80,
+        'pompe industrielle' => 1.50,
+        'motopompe'        => 1.50,
+        'compresseur air'  => 1.20,
+        'soudure'          => 0.50,
 
         // ════════════════════════════════════════════════════════════════
-        // ÉQUIPEMENTS INDUSTRIELS
+        // DÉFAUT — valeur conservative si matière non reconnue
         // ════════════════════════════════════════════════════════════════
-        'machine'          => 2.0,
-        'machine outil'    => 2.0,
-        'tour'             => 2.0,   // tour mécanique
-        'fraiseuse'        => 2.0,
-        'presse'           => 1.8,
-        'grue'             => 1.8,
-        'chariot'          => 1.8,
-        'elevateur'        => 1.8,
-        'élévateur'        => 1.8,
-        'convoyeur'        => 1.8,
-        'chaudiere'        => 1.8,
-        'chaudière'        => 1.8,
-        'echangeur'        => 2.0,   // échangeur thermique (cuivre/inox)
-        'échangeur'        => 2.0,
-        'tuyauterie'       => 2.0,
-        'robinetterie'     => 2.5,   // laiton/bronze
-        'vanne'            => 2.0,
-        'pompe industrielle' => 2.0,
-        'motopompe'        => 2.2,
-        'compresseur air'  => 2.0,
-        'soudure'          => 1.8,
-        'electrode'        => 2.0,
-
-        // ════════════════════════════════════════════════════════════════
-        // DÉFAUT
-        // ════════════════════════════════════════════════════════════════
-        'default'          => 1.0,
+        'default'          => 0.50,
     ];
 }
 
@@ -851,7 +1407,40 @@ function fpt_qr_url( $lot_url ) {
     return 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' . urlencode( $lot_url );
 }
 
-// ─── Helper : meta keys configurables ────────────────────────────────────────
+// ─── Helper : masquer partiellement le numéro de téléphone ───────────────────
+// Ex: +212 662-119988 → +212 662-XXXXXX
+// Garde les 7 premiers chiffres, masque le reste
+function fpt_mask_phone( $phone, $collected = false ) {
+    if ( $collected ) return $phone; // numéro complet si lot collecté
+
+    // Nettoyer et formater
+    $digits = preg_replace('/[^0-9+]/', '', $phone);
+    $len    = strlen($digits);
+
+    if ( $len <= 7 ) return str_repeat('X', $len); // trop court → tout masquer
+
+    // Garder les 7 premiers caractères (indicatif + début numéro)
+    $visible = substr($digits, 0, 7);
+    $masked  = str_repeat('X', $len - 7);
+
+    // Reformater lisiblement
+    return $visible . $masked;
+}
+
+// ─── Helper : URL WhatsApp avec numéro masqué dans le texte ──────────────────
+function fpt_whatsapp_btn( $phone, $collected = false ) {
+    $clean    = preg_replace('/[^0-9]/', '', $phone);
+    $wa_url   = 'https://wa.me/' . $clean;
+    $display  = fpt_mask_phone( $phone, $collected );
+    $label    = fpt_t('Contacter via WhatsApp','Contact via WhatsApp');
+    return sprintf(
+        '<a class="fpt-whatsapp-btn" href="%s" target="_blank" rel="noopener">💬 %s <span style="font-size:11px;opacity:.8">%s</span></a>',
+        esc_url($wa_url),
+        esc_html($label),
+        esc_html($display)
+    );
+}
+
 function fpt_key_poids()    { return 'hp_' . get_option( 'fpt_key_poids',    'poids' ); }
 function fpt_key_ville()    { return 'hp_' . get_option( 'fpt_key_ville',    'ville' ); }
 function fpt_key_whatsapp() { return 'hp_' . get_option( 'fpt_key_whatsapp', 'whatsapp' ); }
@@ -1074,11 +1663,10 @@ function fpt_shortcode_lot( $atts ) {
                 <p class="fpt-traced-date"><?php echo fpt_t('Tracé le','Traced on'); ?> <?php echo esc_html( date_i18n( 'd/m/Y à H:i', strtotime( $traced ) ) ); ?></p>
                 <?php endif; ?>
 
-                <?php if ( $whatsapp ): ?>
-                <a class="fpt-whatsapp-btn" href="https://wa.me/<?php echo esc_attr( preg_replace('/[^0-9]/', '', $whatsapp) ); ?>" target="_blank">
-                    💬 <?php echo fpt_t('Contacter via WhatsApp','Contact via WhatsApp'); ?>
-                </a>
-                <?php endif; ?>
+                <?php if ( $whatsapp ) :
+                    $is_collected = (bool) get_post_meta($post_id, '_fpt_collected', true);
+                    echo fpt_whatsapp_btn($whatsapp, $is_collected);
+                endif; ?>
             </div>
 
             <div class="fpt-lot-qr">
@@ -1167,18 +1755,40 @@ function fpt_shortcode_dashboard( $atts ) {
             <div class="fpt-impact-card">
                 <div class="fpt-impact-icon">⚖️</div>
                 <div class="fpt-impact-value"><?php echo esc_html( fpt_display_weight( $total_poids ) ); ?></div>
-                <div class="fpt-impact-label"><?php echo fpt_t('Déchets collectés','Waste collected'); ?></div>
+                <div class="fpt-impact-label"><?php echo fpt_t('Déchets à recycler','Waste to recycle'); ?></div>
             </div>
             <div class="fpt-impact-card fpt-impact-card--green">
                 <div class="fpt-impact-icon">🌱</div>
                 <div class="fpt-impact-value"><?php echo esc_html( number_format( $total_co2, 2 ) ); ?> t</div>
-                <div class="fpt-impact-label"><?php echo fpt_t('CO₂ évité','CO₂ avoided'); ?></div>
+                <div class="fpt-impact-label"><?php echo fpt_t('CO₂ évité (recyclage)','CO₂ avoided (recycling)'); ?></div>
             </div>
-            <div class="fpt-impact-card">
-                <div class="fpt-impact-icon">🌳</div>
-                <div class="fpt-impact-value"><?php echo esc_html( number_format( $arbres ) ); ?></div>
-                <div class="fpt-impact-label"><?php echo fpt_t('Équivalent arbres/an','Equivalent trees/year'); ?></div>
+            <?php
+            // CO₂ produit par le recyclage formel (matière recyclée + transport)
+            // Facteur recyclage : ~10% du CO₂ évité (estimation conservative)
+            // CO₂ transport = somme des transports de tous les lots collectés
+            $co2_recyclage_process = round($total_co2 * 0.10, 2);
+            $co2_produit_total = $co2_recyclage_process;
+            ?>
+            <div class="fpt-impact-card" style="border-top:3px solid #e67e22">
+                <div class="fpt-impact-icon">🏭</div>
+                <div class="fpt-impact-value" style="color:#e67e22"><?php echo esc_html( number_format( $co2_produit_total, 2 ) ); ?> t</div>
+                <div class="fpt-impact-label"><?php echo fpt_t('CO₂ produit (recyclage)','CO₂ produced (recycling)'); ?></div>
             </div>
+        </div>
+        <?php
+        // Bilan net
+        $bilan_net = round($total_co2 - $co2_produit_total, 2);
+        ?>
+        <div style="background:#e6f5ee;border:1.5px solid #1a7a4a;border-radius:10px;padding:14px 20px;margin:-8px 0 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <span style="font-size:14px;font-weight:600;color:#0f1c13">
+                ⚖️ <?php echo fpt_t('Bilan net CO₂','Net CO₂ balance'); ?>
+            </span>
+            <span style="font-family:monospace;font-size:20px;font-weight:700;color:#1a7a4a">
+                <?php echo esc_html( number_format($bilan_net, 2) ); ?> t CO₂
+            </span>
+            <span style="font-size:12px;color:#6b8070">
+                <?php echo fpt_t('évité − produit','avoided − produced'); ?>
+            </span>
         </div>
 
         <!-- ── Section Santé Enfants / Child Health ──────────────────── -->
@@ -1485,6 +2095,48 @@ function fpt_admin_page() {
         fpt_recalculate_global_stats();
         echo '<div class="notice notice-success"><p>Stats recalculées.</p></div>';
     }
+
+    // Recalculer le CO₂ transport de tous les lots collectés (correction bug)
+    if ( isset( $_POST['fpt_recalc_transport'] ) && check_admin_referer('fpt_recalc') ) {
+        $collected = get_posts([
+            'post_type'   => 'hp_listing',
+            'post_status' => 'publish',
+            'numberposts' => -1,
+            'fields'      => 'ids',
+            'meta_query'  => [['key' => '_fpt_collected', 'value' => '1']],
+        ]);
+        foreach ( $collected as $id ) {
+            $poids_kg    = fpt_get_poids_kg($id);
+            $co2_mat     = (float) get_post_meta($id, '_fpt_co2_avoided', true);
+            $co2_trans   = fpt_calculate_transport_co2($poids_kg);
+            $co2_total   = round($co2_mat + $co2_trans, 6);
+            update_post_meta($id, '_fpt_co2_transport', $co2_trans);
+            update_post_meta($id, '_fpt_co2_total',     $co2_total);
+        }
+        // Recalculer les stats de chaque acheteur
+        $acheteurs = fpt_get_acheteurs();
+        foreach ($acheteurs as $a) {
+            $lots_ach = get_posts([
+                'post_type'   => 'hp_listing',
+                'post_status' => 'publish',
+                'numberposts' => -1,
+                'fields'      => 'ids',
+                'meta_query'  => [
+                    ['key' => '_fpt_collected',   'value' => '1'],
+                    ['key' => '_fpt_acheteur_id', 'value' => $a->ID],
+                ],
+            ]);
+            $total_co2 = $total_poids = 0;
+            foreach ($lots_ach as $lid) {
+                $total_co2   += (float) get_post_meta($lid, '_fpt_co2_total', true);
+                $total_poids += fpt_get_poids_kg($lid);
+            }
+            update_post_meta($a->ID, '_fpt_buyer_co2_total',   round($total_co2, 6));
+            update_post_meta($a->ID, '_fpt_buyer_poids_total', $total_poids);
+            update_post_meta($a->ID, '_fpt_buyer_lots_count',  count($lots_ach));
+        }
+        echo '<div class="notice notice-success"><p>✅ CO₂ transport recalculé correctement pour ' . count($collected) . ' lots collectés.</p></div>';
+    }
     if ( isset( $_POST['fpt_save_settings'] ) && check_admin_referer('fpt_settings') ) {
         update_option( 'fpt_country_name',  sanitize_text_field( $_POST['fpt_country_name'] ) );
         update_option( 'fpt_site_name',     sanitize_text_field( $_POST['fpt_site_name'] ) );
@@ -1497,6 +2149,7 @@ function fpt_admin_page() {
         update_option( 'fpt_prix_cat_slug', sanitize_key( $_POST['fpt_prix_cat_slug'] ) );
         update_option( 'fpt_key_prix_jour',    sanitize_text_field( $_POST['fpt_key_prix_jour'] ) );
         update_option( 'fpt_key_buyersprice',  sanitize_text_field( $_POST['fpt_key_buyersprice'] ) );
+        update_option( 'fpt_acheteurs_cat_slug', sanitize_key( $_POST['fpt_acheteurs_cat_slug'] ) );
         update_option( 'fpt_prix_category_slug', sanitize_key( $_POST['fpt_prix_category_slug'] ) );
         echo '<div class="notice notice-success"><p>Paramètres sauvegardés / Settings saved.</p></div>';
     }
@@ -1577,7 +2230,12 @@ function fpt_admin_page() {
                     </td>
                 </tr>
                 <tr>
-                    <th><label for="fpt_key_buyersprice">Buyers list field name (Prix du jour)</label></th>
+                    <th><label for="fpt_acheteurs_cat_slug">Acheteurs réguliers — Category slug</label></th>
+                    <td>
+                        <input type="text" id="fpt_acheteurs_cat_slug" name="fpt_acheteurs_cat_slug" value="<?php echo esc_attr( get_option('fpt_acheteurs_cat_slug','acheteurs') ); ?>" class="regular-text" placeholder="acheteurs">
+                        <p class="description">🇫🇷 acheteurs &nbsp;|&nbsp; 🇬🇧 buyers</p>
+                    </td>
+                </tr>
                     <td>
                         <input type="text" id="fpt_key_buyersprice" name="fpt_key_buyersprice" value="<?php echo esc_attr( get_option('fpt_key_buyersprice','buyersprice') ); ?>" class="regular-text" placeholder="buyersprice">
                         <p class="description">🇫🇷 laisser vide (description utilisée) &nbsp;|&nbsp; 🇬🇧 <strong>buyersprice</strong></p>
@@ -1612,13 +2270,26 @@ function fpt_admin_page() {
         <ul>
             <li><code>[fpt_dashboard]</code> — Dashboard global impact sur n'importe quelle page</li>
             <li><code>[fpt_lot id="241"]</code> — Fiche publique d'un lot spécifique</li>
+            <li><code>[fpt_methodologie]</code> — Page méthodologie complète</li>
+            <li><code>[fpt_acheteur id="XXX"]</code> — Dashboard d'un acheteur régulier (remplacer XXX par l'ID du post acheteur)</li>
         </ul>
 
         <h2>🔄 Recalculer les stats</h2>
         <form method="post">
             <?php wp_nonce_field('fpt_recalc'); ?>
             <p>Utile si vous avez importé des annonces existantes.</p>
-            <button type="submit" name="fpt_recalculate" class="button button-primary">Recalculer depuis zéro</button>
+            <button type="submit" name="fpt_recalculate" class="button button-primary">Recalculer CO₂ depuis zéro</button>
+        </form>
+
+        <h2 style="margin-top:20px">🚛 Corriger le CO₂ transport</h2>
+        <form method="post">
+            <?php wp_nonce_field('fpt_recalc'); ?>
+            <p style="color:#c0392b"><strong>⚠️ À exécuter une fois</strong> si le CO₂ transport était erroné (bug avant v1.6.1).<br>
+            Formule correcte : (Poids kg ÷ 1000) × <?php echo fpt_transport_distance_km(); ?> km × 0,062 = t CO₂</p>
+            <p><strong>Exemple vérification :</strong> 30 kg × 150 km → 0,030 t × 150 × 0,062 = <strong>0,000279 t CO₂</strong></p>
+            <button type="submit" name="fpt_recalc_transport" class="button button-secondary" style="color:#c0392b;border-color:#c0392b">
+                🔧 Recalculer CO₂ transport (correction bug)
+            </button>
         </form>
 
         <h2 style="margin-top:30px">🌱 Facteurs CO₂ utilisés (ADEME)</h2>
