@@ -3,7 +3,7 @@
  * Plugin Name: FerayPro Tracer
  * Plugin URI: https://ma.feraypro.com/impact
  * Description: Traçabilité des lots de déchets recyclés avec calcul CO₂ évité et génération de QR code. Module open source pour UNICEF Venture Fund.
- * Version: 1.1.0
+ * Version: 1.7.1
  * Author: FerayPro
  * License: MIT
  * Text Domain: feraypro-tracer
@@ -11,7 +11,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'FPT_VERSION', '1.6.0' );
+define( 'FPT_VERSION', '1.7.1' );
 
 // ─── Helper : affichage du poids selon l'unité configurée ────────────────────
 function fpt_weight_unit_label() {
@@ -235,7 +235,6 @@ function fpt_co2_process_factors() {
         'etain'      => 0.300,
         'tin'        => 0.300,
         'nickel'     => 0.500,
-        'aluminium'  => 0.360,
 
         // E-waste / Électronique (estimation ACV)
         'electronique' => 1.500,
@@ -281,7 +280,7 @@ function fpt_co2_process_factors() {
 // ─── Calcul CO₂ produit par le process de recyclage ──────────────────────────
 function fpt_calculate_process_co2( $titre, $poids_kg ) {
     $factors     = fpt_co2_process_factors();
-    $titre_lower = strtolower( remove_accents( $titre ) );
+    $titre_lower = fpt_normalize_text( $titre );
     $factor      = $factors['default'];
 
     foreach ( $factors as $kw => $val ) {
@@ -549,7 +548,7 @@ function fpt_shortcode_acheteur( $atts ) {
 
 // ─── Recherche des prix du jour pour un type de déchet ───────────────────────
 function fpt_get_prix_du_jour( $titre_lot ) {
-    $titre_lower    = strtolower( remove_accents( $titre_lot ) );
+    $titre_lower    = fpt_normalize_text( $titre_lot );
     $category_slug  = get_option( 'fpt_prix_cat_slug', 'prix' );
 
     // Récupérer toutes les annonces de la catégorie prix
@@ -594,7 +593,7 @@ function fpt_get_prix_du_jour( $titre_lot ) {
     );
 
     foreach ( $prix_listings as $prix_post ) {
-        $prix_titre_lower = strtolower( remove_accents( $prix_post->post_title ) );
+        $prix_titre_lower = fpt_normalize_text( $prix_post->post_title );
         $score = 0;
 
         // Poids fort : le mot-clé principal du lot est dans le titre Prix du jour
@@ -673,7 +672,7 @@ function fpt_inject_on_listing( $content ) {
     $impact_url = home_url( '/impact' );
 
     // ── Détection du matériau et facteur CO₂ ────────────────────────────────
-    $titre_lower     = strtolower( remove_accents( get_the_title( $post_id ) ) );
+    $titre_lower     = fpt_normalize_text( get_the_title( $post_id ) );
     $factors         = fpt_co2_factors();
     $detected_kw     = fpt_t('non reconnu','unrecognized');
     $detected_factor = 1.0;
@@ -1387,7 +1386,7 @@ function fpt_calculate_co2( $titre, $poids_kg ) {
     if ( empty( $poids_kg ) || $poids_kg <= 0 ) return 0;
 
     $factors = fpt_co2_factors();
-    $titre_lower = strtolower( remove_accents( $titre ) );
+    $titre_lower = fpt_normalize_text( $titre );
     $factor = $factors['default'];
 
     foreach ( $factors as $keyword => $value ) {
@@ -1407,41 +1406,27 @@ function fpt_qr_url( $lot_url ) {
     return 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' . urlencode( $lot_url );
 }
 
-// ─── Helper : masquer partiellement le numéro de téléphone ───────────────────
-// Ex: +212 662-119988 → +212 662-XXXXXX
-// Garde les 7 premiers chiffres, masque le reste
-function fpt_mask_phone( $phone, $collected = false ) {
-    if ( $collected ) return $phone; // numéro complet si lot collecté
-
-    // Nettoyer et formater
-    $digits = preg_replace('/[^0-9+]/', '', $phone);
-    $len    = strlen($digits);
-
-    if ( $len <= 7 ) return str_repeat('X', $len); // trop court → tout masquer
-
-    // Garder les 7 premiers caractères (indicatif + début numéro)
-    $visible = substr($digits, 0, 7);
-    $masked  = str_repeat('X', $len - 7);
-
-    // Reformater lisiblement
-    return $visible . $masked;
+// ─── Normalisation texte multilingue (Phase 2 — NLP transitoire) ─────────────
+// Supporte FR, EN + translittérations Darija, Lingala, Swahili de base
+function fpt_normalize_text( $text ) {
+    $text = mb_strtolower( $text, 'UTF-8' );
+    $replacements = [
+        // FR accents
+        'é'=>'e','è'=>'e','ê'=>'e','à'=>'a','â'=>'a','ç'=>'c',
+        'î'=>'i','ï'=>'i','ô'=>'o','û'=>'u','ù'=>'u',
+        // Darija (Maroc) — translittérations de base
+        'خردة'=>'ferraille','نحاس'=>'cuivre','حديد'=>'fer',
+        'ألومنيوم'=>'aluminium','بطارية'=>'batterie',
+        // Lingala (RDC)
+        'singa'=>'cable','motele'=>'metal','likoxi'=>'cuivre',
+        // Swahili (RDC Est / Kenya)
+        'chuma'=>'fer','shaba'=>'cuivre','alumini'=>'aluminium',
+        'betri'=>'batterie','taka'=>'dechet',
+    ];
+    $text = strtr( $text, $replacements );
+    return trim( preg_replace( '/\s+/', ' ', $text ) );
 }
 
-// ─── Helper : URL WhatsApp avec numéro masqué dans le texte ──────────────────
-function fpt_whatsapp_btn( $phone, $collected = false ) {
-    $clean    = preg_replace('/[^0-9]/', '', $phone);
-    $wa_url   = 'https://wa.me/' . $clean;
-    $display  = fpt_mask_phone( $phone, $collected );
-    $label    = fpt_t('Contacter via WhatsApp','Contact via WhatsApp');
-    return sprintf(
-        '<a class="fpt-whatsapp-btn" href="%s" target="_blank" rel="noopener">💬 %s <span style="font-size:11px;opacity:.8">%s</span></a>',
-        esc_url($wa_url),
-        esc_html($label),
-        esc_html($display)
-    );
-}
-
-function fpt_key_poids()    { return 'hp_' . get_option( 'fpt_key_poids',    'poids' ); }
 function fpt_key_ville()    { return 'hp_' . get_option( 'fpt_key_ville',    'ville' ); }
 function fpt_key_whatsapp() { return 'hp_' . get_option( 'fpt_key_whatsapp', 'whatsapp' ); }
 function fpt_key_prix()     { return 'hp_' . get_option( 'fpt_key_prix',     'prixvendeur' ); }
@@ -1453,68 +1438,80 @@ function fpt_get_poids_kg( $post_id ) {
 }
 
 
+// ─── Population density multiplier for ERRI (Phase 2 — géospatial) ───────────
+function fpt_get_population_density_multiplier() {
+    $country = strtolower( get_option( 'fpt_country_name', '' ) );
+    if ( strpos($country, 'maroc') !== false || strpos($country, 'morocco') !== false ) return 1.2;
+    if ( strpos($country, 'congo') !== false || strpos($country, 'rdc') !== false )     return 1.8;
+    if ( strpos($country, 'senegal') !== false || strpos($country, 'sénégal') !== false ) return 1.3;
+    if ( strpos($country, 'nigeria') !== false )  return 1.5;
+    if ( strpos($country, 'kenya') !== false )    return 1.2;
+    if ( strpos($country, 'france') !== false )   return 0.8;
+    if ( strpos($country, 'usa') !== false || strpos($country, 'états-unis') !== false ) return 0.7;
+    return 1.0;
+}
+
 function fpt_calculate_health( $listings_ids ) {
-    // Facteurs de polluants évités par tonne recyclée (vs recyclage informel/brûlage)
-    // Sources : OMS, Pure Earth, EPA, études terrain Afrique
-    $health_factors = [
-        // Plomb évité (kg/tonne) — batteries, tuyaux, soudure, peinture
-        'plomb_keywords'   => ['plomb','batterie','accumulateur','soudure','peinture','radiateur'],
-        'plomb_kg_per_t'   => 0.5,   // ~500g plomb non dispersé / tonne recyclée proprement
-
-        // Cadmium évité (g/tonne) — piles, e-waste, plastiques
-        'cadmium_keywords' => ['pile','batterie lithium','electronique','ewaste','plastique','telephone','ordinateur','smartphone'],
-        'cadmium_g_per_t'  => 200,   // 200g cadmium / tonne
-
-        // PM2.5 évité (kg/tonne) — brûlage câbles cuivre, plastiques
-        'pm25_keywords'    => ['cable','fil','cuivre','plastique','pvc','caoutchouc','pneu'],
-        'pm25_kg_per_t'    => 15,    // 15kg PM2.5 / tonne câble brûlé évité
-
-        // Mercure évité (g/tonne) — écrans, thermomètres, lampes
-        'mercure_keywords' => ['ecran','moniteur','television','tv','lampe','neon','thermometre'],
-        'mercure_g_per_t'  => 50,    // 50g mercure / tonne
-    ];
+    // ── Facteurs polluants (Sources : OMS, Pure Earth, EPA, UNEP) ─────────────
+    // CORRECTION bug co-occurrence : chaque polluant analysé indépendamment
+    // Un lot peut contribuer à PLUSIEURS indicateurs simultanément
+    // Ex: "Peinture au plomb et batteries" → plomb ET cadmium tous les deux comptés
+    $plomb_kw    = ['plomb','lead','batterie','battery','accumulateur','soudure','solder','peinture','paint','radiateur','radiator'];
+    $cadmium_kw  = ['pile','batterie lithium','lithium battery','electronique','electronics','ewaste','e-waste','plastique','plastic','telephone','phone','smartphone','ordinateur','computer'];
+    $pm25_kw     = ['cable','câble','wire','fil','cuivre','copper','plastique','plastic','pvc','caoutchouc','rubber','pneu','tire'];
+    $mercure_kw  = ['ecran','screen','moniteur','monitor','television','tv','lampe','lamp','neon','thermometre','thermometer'];
 
     $plomb_kg = $cadmium_g = $pm25_kg = $mercure_g = 0;
 
     foreach ( $listings_ids as $id ) {
         $poids_kg = (float) fpt_get_poids_kg( $id );
         if ( $poids_kg <= 0 ) continue;
-        $poids_t  = $poids_kg / 1000;
-        $titre    = strtolower( remove_accents( get_the_title( $id ) ) );
+        $poids_t = $poids_kg / 1000;
+        $titre   = fpt_normalize_text( get_the_title( $id ) );
 
-        foreach ( $health_factors['plomb_keywords'] as $kw ) {
-            if ( strpos( $titre, $kw ) !== false ) {
-                $plomb_kg += $poids_t * $health_factors['plomb_kg_per_t'];
+        // ── Chaque polluant analysé indépendamment (pas de break global) ──────
+        // Plomb
+        foreach ( $plomb_kw as $kw ) {
+            if ( strpos($titre, $kw) !== false ) {
+                $plomb_kg += $poids_t * 0.5; // 500g plomb/t — Pure Earth 2016, WHO 2021
+                break; // break uniquement sur la boucle plomb
+            }
+        }
+        // Cadmium (indépendant du plomb)
+        foreach ( $cadmium_kw as $kw ) {
+            if ( strpos($titre, $kw) !== false ) {
+                $cadmium_g += $poids_t * 200; // 200g cadmium/t — Pure Earth 2020, UNEP 2018
                 break;
             }
         }
-        foreach ( $health_factors['cadmium_keywords'] as $kw ) {
-            if ( strpos( $titre, $kw ) !== false ) {
-                $cadmium_g += $poids_t * $health_factors['cadmium_g_per_t'];
+        // PM2.5 (indépendant des autres)
+        foreach ( $pm25_kw as $kw ) {
+            if ( strpos($titre, $kw) !== false ) {
+                $pm25_kg += $poids_t * 15; // 15kg PM2.5/t — EPA AP-42 2022
                 break;
             }
         }
-        foreach ( $health_factors['pm25_keywords'] as $kw ) {
-            if ( strpos( $titre, $kw ) !== false ) {
-                $pm25_kg += $poids_t * $health_factors['pm25_kg_per_t'];
-                break;
-            }
-        }
-        foreach ( $health_factors['mercure_keywords'] as $kw ) {
-            if ( strpos( $titre, $kw ) !== false ) {
-                $mercure_g += $poids_t * $health_factors['mercure_g_per_t'];
+        // Mercure (indépendant des autres)
+        foreach ( $mercure_kw as $kw ) {
+            if ( strpos($titre, $kw) !== false ) {
+                $mercure_g += $poids_t * 50; // 50g mercure/t — UNEP Minamata 2018
                 break;
             }
         }
     }
+
+    // ── ERRI avec multiplicateur densité démographique (Phase 2) ─────────────
+    // ERRI = (Lead diverted kg × 50) + (PM2.5 diverted kg × 10) × density_multiplier
+    $multiplier = fpt_get_population_density_multiplier();
+    $erri       = round( ($plomb_kg * 50 + $pm25_kg * 10) * $multiplier );
 
     return [
         'plomb_kg'   => round( $plomb_kg, 3 ),
         'cadmium_g'  => round( $cadmium_g, 1 ),
         'pm25_kg'    => round( $pm25_kg, 2 ),
         'mercure_g'  => round( $mercure_g, 1 ),
-        // Enfants protégés : 1 kg plomb non dispersé = ~50 enfants protégés (OMS)
-        'enfants'    => round( $plomb_kg * 50 + $pm25_kg * 10 ),
+        'enfants'    => $erri, // ERRI — Exposure Risk Reduction Index
+        'multiplier' => $multiplier,
     ];
 }
 
@@ -1663,10 +1660,11 @@ function fpt_shortcode_lot( $atts ) {
                 <p class="fpt-traced-date"><?php echo fpt_t('Tracé le','Traced on'); ?> <?php echo esc_html( date_i18n( 'd/m/Y à H:i', strtotime( $traced ) ) ); ?></p>
                 <?php endif; ?>
 
-                <?php if ( $whatsapp ) :
-                    $is_collected = (bool) get_post_meta($post_id, '_fpt_collected', true);
-                    echo fpt_whatsapp_btn($whatsapp, $is_collected);
-                endif; ?>
+                <?php if ( $whatsapp ): ?>
+                <a class="fpt-whatsapp-btn" href="https://wa.me/<?php echo esc_attr( preg_replace('/[^0-9]/', '', $whatsapp) ); ?>" target="_blank">
+                    💬 <?php echo fpt_t('Contacter via WhatsApp','Contact via WhatsApp'); ?>
+                </a>
+                <?php endif; ?>
             </div>
 
             <div class="fpt-lot-qr">

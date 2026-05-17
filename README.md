@@ -2,10 +2,10 @@
 
 **Open-source waste batch traceability plugin for WordPress / HivePress**
 
-Automatically calculates CO₂ avoided and child health impact for every recycled waste batch published on a marketplace. Built for [FerayPro](https://ma.feraypro.com) — a circular waste marketplace operating in Morocco, DRC, France, and the USA.
+Automatically calculates CO₂ avoided and child health impact for every recycled waste batch. Built for [FerayPro](https://ma.feraypro.com) — a circular waste marketplace in Morocco, DRC, France, and the USA.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![WordPress](https://img.shields.io/badge/WordPress-Multisite-blue.svg)](https://wordpress.org)
+[![Version](https://img.shields.io/badge/Version-1.7.1-blue.svg)](CHANGELOG.md)
 [![UNICEF Venture Fund](https://img.shields.io/badge/UNICEF-Venture%20Fund%202026-00aeef.svg)](https://unicefinnovationfund.org)
 
 ---
@@ -25,29 +25,28 @@ Automatically calculates CO₂ avoided and child health impact for every recycle
 
 When a seller publishes a waste listing on HivePress / ListingHive, the plugin automatically:
 
-1. **Detects the material type** from the listing title using 200+ bilingual keywords (French + English)
-2. **Calculates CO₂ avoided** using ADEME Base Carbone emission factors
-3. **Calculates child health impact** — lead, PM2.5, cadmium, mercury avoided — using WHO, EPA, Pure Earth, and UNEP factors
-4. **Generates a unique QR code** linking to the public batch traceability page
-5. **Updates the live impact dashboard** with cumulative totals
+1. **Detects the material type** using `fpt_normalize_text()` — 200+ bilingual keywords (FR + EN) + Darija, Lingala, Swahili NLP transliteration
+2. **Calculates CO₂ net gain** using ADEME Base Carbone / FEDEREC ACV 2017 net gain factors (Primary − Recycled)
+3. **Calculates ERRI** (Exposure Risk Reduction Index) — Lead, PM2.5, Cadmium, Mercury — with population density multiplier by country
+4. **Generates a QR code** linking to the public batch traceability page
+5. **Updates the live impact dashboard** with cumulative totals and net CO₂ balance
 
 ---
 
 ## 📊 Impact Dashboard
 
-The public dashboard displays:
-
 | Indicator | Source |
 |-----------|--------|
 | ♻️ Batches traced | Live count |
-| ⚖️ Waste collected (t) | Sum of batch weights |
-| 🌱 CO₂ avoided (t) | ADEME Base Carbone |
-| 🌳 Equivalent trees/year | FAO (22 kg CO₂/tree/year) |
-| 🔴 Lead not dispersed (kg) | WHO Lead Report 2021 |
-| ☁️ PM2.5 avoided (kg) | EPA AP-42 2022 |
-| ⚠️ Cadmium avoided (g) | Pure Earth DB 2020 |
-| 🧠 Mercury avoided (g) | UNEP Minamata 2018 |
-| 👶 Children protected (est.) | WHO GHO 2021 + HEI 2020 |
+| ⚖️ Waste to recycle (kg/lb) | Sum of batch weights |
+| 🌱 CO₂ avoided (net gain) | ADEME/FEDEREC net gain factors |
+| 🏭 CO₂ produced (recycling) | FEDEREC/ADEME LCA 2017 process factors |
+| ⚖️ Net CO₂ balance | Avoided − Produced |
+| 🔴 Lead diverted (kg) | WHO Lead Report 2021 |
+| ☁️ PM2.5 diverted (kg) | EPA AP-42 2022 |
+| ⚠️ Cadmium diverted (g) | Pure Earth DB 2020 |
+| 🧠 Mercury diverted (g) | UNEP Minamata 2018 |
+| 📊 ERRI score | WHO GHO 2021 + HEI 2020 × density multiplier |
 
 Full methodology: [METHODOLOGY.md](METHODOLOGY.md)
 
@@ -56,35 +55,29 @@ Full methodology: [METHODOLOGY.md](METHODOLOGY.md)
 ## ⚡ Quick Start
 
 ### Requirements
-- WordPress Multisite (subdomain configuration)
-- HivePress plugin + ListingHive theme
-- PHP 7.4+
-- MySQL 5.7+
+- WordPress Multisite (subdomain)
+- HivePress + ListingHive
+- PHP 7.4+ · MySQL 5.7+
 
 ### Installation
 
-1. Download the latest release ZIP
-2. Go to **WordPress Admin → Plugins → Add New → Upload Plugin**
-3. Upload the ZIP and activate
-4. Go to **FP Tracer → Settings** and configure:
+1. Upload ZIP → **Plugins → Add New → Upload**
+2. Activate → go to **FP Tracer → Settings**
 
-| Setting | Morocco example | USA example |
-|---------|----------------|-------------|
-| Platform name | FerayPro | FerayPro |
-| Country | Maroc | USA |
-| Language | 🇫🇷 Français | 🇬🇧 English |
-| Weight field name | `poids` | `weight` |
-| Weight unit | kg | lb |
-| City field name | `ville` | `city` |
-| Phone field name | `whatsapp` | `telephone` |
-| Price field name | `prixvendeur` | `pricebuyer` |
-| Prix du jour — Category slug | `prix` | `price` |
-| Prix/kg field name | `prix` | `price_2` |
-| Buyers list field name | *(empty — uses description)* | `buyersprice` |
+### Configuration by country
 
-5. Create a WordPress page with slug `impact` and add `[fpt_dashboard]`
-6. Create a page with slug `methodologie` and add `[fpt_methodologie]`
-7. Click **Recalculate from zero** to trace existing listings
+| Setting | Morocco 🇲🇦 | USA 🇺🇸 | DRC 🇨🇩 |
+|---------|------------|---------|---------|
+| Language | 🇫🇷 Français | 🇬🇧 English | 🇫🇷 Français |
+| Country | Maroc | USA | Congo |
+| Weight field | `poids` | `weight` | `poids` |
+| Weight unit | kg | lb | kg |
+| City field | `ville` | `city` | `ville` |
+| Phone field | `whatsapp` | `telephone` | `whatsapp` |
+| Price field | `prixvendeur` | `pricebuyer` | `prixvendeur` |
+| Prix du jour slug | `prix` | `price` | `prix` |
+| Prix/kg field | `prix` | `price_2` | `prix` |
+| Buyers slug | `acheteurs` | `buyers` | `acheteurs` |
 
 ---
 
@@ -93,161 +86,123 @@ Full methodology: [METHODOLOGY.md](METHODOLOGY.md)
 | Shortcode | Description |
 |-----------|-------------|
 | `[fpt_dashboard]` | Live global impact dashboard |
-| `[fpt_lot id="241"]` | Public traceability page for a specific batch |
-| `[fpt_methodologie]` | Full calculation methodology page |
-| `[fpt_acheteur id="XXX"]` | Buyer dashboard — CO₂ produced by recycling process |
+| `[fpt_lot id="241"]` | Public traceability page for a batch |
+| `[fpt_methodologie]` | Calculation methodology page |
+| `[fpt_acheteur id="XXX"]` | Buyer dashboard — CO₂ produced by recycling |
 | `[fpt_partenaires]` | Partner traffic source dashboard |
-
----
-
-## 🔧 HivePress Field Names
-
-The plugin reads HivePress custom attributes via their `Field Name` (meta key prefix `hp_`). Default field names by country:
-
-| Field | Morocco (FR) | USA (EN) |
-|-------|-------------|----------|
-| Weight | `poids` | `weight` |
-| City | `ville` | `city` |
-| Phone/WhatsApp | `whatsapp` | `telephone` |
-| Price | `prixvendeur` | `pricebuyer` |
-
-To find your field names: **HivePress → Listings → Attributes → Edit attribute → Field Name**
-
----
-
-## 🌱 CO₂ Factors (ADEME Base Carbone)
-
-The plugin includes 200+ material keywords mapped to ADEME emission factors. Key factors:
-
-| Material | t CO₂ avoided / t recycled |
-|----------|---------------------------|
-| Aluminum | 9.5 |
-| Copper | 3.5 |
-| E-waste | 4.0 |
-| Lithium battery | 5.0 |
-| Steel / Scrap | 1.8 |
-| Paper / Cardboard | 0.9 |
-| PET Plastic | 1.5 |
-
-Full factor list: [METHODOLOGY.md](METHODOLOGY.md)
-
----
-
-## 🔬 Pollutant Exposure Risk Reduction Indicators
-
-Estimated pollutant diversion from informal recycling — conservative global coefficients, field validation planned Phase 2.
-
-| Indicator | Formula | Source |
-|-----------|---------|--------|
-| Lead diverted est. (kg) | Weight (t) × 0.5 | Pure Earth 2016, WHO 2021 |
-| PM2.5 diverted est. (kg) | Weight (t) × 15 | EPA AP-42 2022 |
-| Cadmium diverted est. (g) | Weight (t) × 200 | Pure Earth 2020, UNEP 2018 |
-| Mercury diverted est. (g) | Weight (t) × 50 | UNEP Minamata 2018 |
-| ERRI (Exposure Risk Reduction Index) | (Lead kg × 50) + (PM2.5 kg × 10) | WHO GHO 2021, HEI 2020 |
-
-> **Note:** These indicators represent estimated exposure risk reduction — not peer-reviewed or clinically validated impact attribution. They are a transitional measurement tool evolving toward locally validated ML models in Phase 2.
 
 ---
 
 ## 🤝 Partner Tracking
 
-Give partner companies this link format:
+A key feature for community mobilization — schools, municipalities, and NGOs can organize waste collection campaigns and track their collective impact:
+
 ```
-https://ma.feraypro.com/?ref=company-name
+https://ma.feraypro.com/?ref=school-name
+https://ma.feraypro.com/?ref=ngo-kinshasa
 ```
 
-When a visitor arrives via this link and publishes a listing, the batch is automatically tagged with the partner name. View all partner batches at `[fpt_partenaires]`.
+When a visitor arrives via this link and publishes a listing, the batch is automatically tagged. View all partner batches and their CO₂ impact at `[fpt_partenaires]`.
 
-## 🔒 Phone Privacy
+This feature enables **community-level recycling campaigns** targeting the neighborhoods where children live near informal recycling sites.
 
-Seller phone numbers are automatically masked on public listing pages:
-- **Awaiting collection**: `+21266XXXXXXX` (7 digits visible)
-- **Already collected**: full number displayed
+---
 
-The WhatsApp link always uses the real number — only the visual display is masked.
+## 🔬 ERRI — Exposure Risk Reduction Index
 
-### Phase 1 — MVP (Current — v1.7.0)
-- [x] CO₂ calculation engine (200+ materials, FR + EN) — corrected ADEME net gain factors
-- [x] CO₂ calculation detail bar on each listing (material · factor · formula)
-- [x] Pollutant exposure risk reduction indicators (Lead, PM2.5, Cadmium, Mercury)
-- [x] Exposure Risk Reduction Index (ERRI) — scientifically framed
-- [x] QR code generation per batch
-- [x] Public impact dashboard (CO₂ avoided · CO₂ produced by recycling · net balance)
+```
+ERRI = ((Lead diverted kg × 50) + (PM2.5 diverted kg × 10)) × density_multiplier
+```
+
+Density multiplier by country (Phase 2 geospatial):
+- DRC: ×1.8 · Morocco: ×1.2 · Senegal: ×1.3 · France/USA: ×0.7–0.8
+
+> ERRI is an estimative proxy — not peer-reviewed or clinically validated. Transitional measurement tool evolving toward locally validated ML models in Phase 2.
+
+---
+
+## 🔧 CO₂ Net Gain Factors (ADEME/FEDEREC)
+
+Key factors (Primary − Recycled = Net gain):
+
+| Material | Net gain | Primary | Recycled |
+|----------|----------|---------|----------|
+| Aluminum | **6.88 t/t** | 7.24 | 0.36 |
+| Copper | **0.141 t/t** | 1.445 | 1.304 |
+| Steel/Scrap | **1.10 t/t** | 1.9 | 0.58 |
+| PET Plastic | **1.50 t/t** | 2.15 | 0.65 |
+| Paper | **0.050 t/t** | 0.92 | 0.87 |
+| Glass | **0.240 t/t** | 0.53 | 0.29 |
+
+Full table: [METHODOLOGY.md](METHODOLOGY.md)
+
+---
+
+## 🗺️ Roadmap
+
+### Phase 1 — MVP (Current — v1.7.1)
+- [x] CO₂ net gain engine (200+ materials, FR + EN + Darija/Lingala/Swahili NLP)
+- [x] CO₂ process factors for buyer dashboard (FEDEREC/ADEME LCA 2017)
+- [x] ERRI with population density multiplier
+- [x] Health co-occurrence fix — multi-pollutant per batch
+- [x] QR code + Digital Batch ID per batch
+- [x] Public impact dashboard (CO₂ avoided · CO₂ produced · net balance)
 - [x] Methodology page with validation status
-- [x] Multi-country support (Morocco, DRC, France, USA)
-- [x] Bilingual FR/EN
+- [x] Multi-country (Morocco, DRC, France, USA)
+- [x] Bilingual FR/EN + transitional Darija/Lingala/Swahili
 - [x] Configurable field names and weight units (kg/lb)
-- [x] Dynamic unit display throughout (dashboard, listing, methodology)
-- [x] Prix du jour block — today's buyer prices on each listing
-- [x] Best-match scoring for Prix du jour
-- [x] Configurable price category slug and field names per country
-- [x] Collection confirmation (admin metabox) — buyer selection + date
-- [x] Status badge on listing cards (⏳ À collecter / ✅ Collecté)
-- [x] Buyer dashboard (`[fpt_acheteur id="XXX"]`) — CO₂ produced by recycling process
-- [x] Phone number masking for seller privacy
-- [x] Partner tracking system (`?ref=partner-name` + `[fpt_partenaires]`)
+- [x] Prix du jour block — buyer prices on each listing
+- [x] Collection confirmation (admin metabox)
+- [x] Buyer dashboard (`[fpt_acheteur]`)
+- [x] Partner tracking + community campaign dashboard
 
-### Phase 2 — ML Refinement (2026)
-- [ ] Random Forest model trained on Morocco + DRC field data
-- [ ] Geospatial health model with distance-decay functions
-- [ ] Statistical confidence intervals on all estimates
-- [ ] Arabic, Lingala, Swahili keyword support
-- [ ] Interactive geospatial impact map
-- [ ] Export API for governments and NGOs
-- [ ] TF-IDF fallback for unrecognized material descriptions
+### Phase 2 — ML Refinement (2026–2027)
+- [ ] Random Forest model (Morocco + DRC field data)
+- [ ] Statistical confidence intervals
+- [ ] Geospatial impact map
+- [ ] Full Arabic, Lingala, Swahili keyword vocabularies
+- [ ] TF-IDF fallback classification
+- [ ] Export API for governments/NGOs
 
 ---
 
 ## 🤝 Contributing
 
-We welcome contributions of all kinds. See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
-
-The most impactful contributions right now:
-- **New material keywords** in any language
-- **Arabic, Lingala, Swahili translations** of existing keywords
-- **Emission factor corrections** with source citations
-- **Bug reports** and feature requests via GitHub Issues
+See [CONTRIBUTING.md](CONTRIBUTING.md). Most impactful contributions:
+- New material keywords in any language
+- Arabic, Lingala, Swahili translations
+- Emission factor corrections with source citations
 
 ---
 
 ## 📚 Sources
 
-- [ADEME Base Carbone](https://base-empreinte.ademe.fr) — CO₂ emission factors
-- [WHO Global Health Observatory (2021)](https://www.who.int/data/gho) — Lead exposure in children
-- [Pure Earth Toxic Sites Database (2020)](https://www.pureearth.org) — Cadmium & lead contamination
-- [EPA AP-42 (2022)](https://www.epa.gov/air-emissions-factors-and-quantification/ap-42-compilation-air-emissions-factors) — Open burning PM2.5
-- [UNEP Minamata Convention (2018)](https://www.mercuryconvention.org) — Mercury assessment
-- [UNICEF Toxic Truth (2020)](https://www.unicef.org/reports/toxic-truth) — Lead exposure in children
-- [HEI (2020)](https://www.healtheffects.org) — Air pollution sub-Saharan Africa
-- [FAO (2021)](https://www.fao.org/forestry) — Carbon sequestration in forests
-- [IPCC AR6 (2022)](https://www.ipcc.ch/ar6) — Heavy industry emission factors
+- [ADEME Base Carbone](https://base-empreinte.ademe.fr) — CO₂ net gain factors
+- [FEDEREC/ADEME ACV 2017](https://federec.com) — Steel, copper, paper LCA
+- [WHO (2021)](https://www.who.int/data/gho) — Lead exposure, ERRI coefficient
+- [Pure Earth (2020)](https://www.pureearth.org) — Cadmium & lead at African sites
+- [EPA AP-42 (2022)](https://www.epa.gov) — PM2.5 open burning
+- [UNEP (2018)](https://www.mercuryconvention.org) — Mercury in e-waste
+- [UNICEF (2020)](https://www.unicef.org/reports/toxic-truth) — Child lead exposure
+- [HEI (2020)](https://www.healtheffects.org) — PM2.5 ERRI coefficient
+- [FAO (2021)](https://www.fao.org) — Carbon sequestration
 
 ---
 
 ## 📄 License
 
-MIT License — see [LICENSE](LICENSE)
-
-Copyright (c) 2026 FerayPro
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED.
+MIT License — Copyright (c) 2026 FerayPro
 
 ---
 
 ## 🏷️ Citation
 
-If you use FerayPro Tracer in research or reports, please cite:
-
 ```
-FerayPro Tracer (2026). Open-source waste batch traceability plugin.
+FerayPro Tracer v1.7.1 (2026). Open-source waste batch traceability plugin.
 MIT License. https://github.com/feraypro/feraypro-tracer
-Impact methodology: https://ma.feraypro.com/methodologie
+Methodology: https://ma.feraypro.com/methodologie
 ```
 
 ---
 
-*Built with ❤️ for the informal collectors, the scrap dealers, and the children living near recycling sites.*
+*Built for the informal collectors, the scrap dealers, and the children living near recycling sites.*
