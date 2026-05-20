@@ -1,7 +1,7 @@
 # FerayPro Tracer — Calculation Methodology
 
 **Last updated:** 2026  
-**Version:** 1.7.1  
+**Version:** 1.7.2  
 **License:** MIT  
 **Live demo:** [ma.feraypro.com/methodologie](https://ma.feraypro.com/methodologie)
 
@@ -82,21 +82,47 @@ CO₂ net gain (t) = Weight (kg) ÷ 1000 × Net gain factor (t CO₂ / t recycle
 | **Aluminum** | **6.88** | 7.24 | 0.36 | ADEME Base Carbone |
 | **Copper** | **0.141** | 1.445 | 1.304 | FEDEREC/ADEME ACV 2017 |
 | **Bronze** | **0.120** | ~1.4 | ~1.28 | Estimated (Cu/Sn alloy) |
-| **Brass** | **0.100** | ~1.3 | ~1.2 | Estimated (Cu/Zn alloy) |
-| **Stainless steel** | **2.10** | 2.8 | 0.7 | ADEME |
+| **Brass / Laiton** | **0.100** | ~1.3 | ~1.2 | Estimated (Cu/Zn alloy) |
+| **Stainless steel / Inox** | **2.10** | 2.8 | 0.7 | ADEME |
 | **Nickel** | **6.00** | 6.5 | 0.5 | ADEME |
 | **Zinc** | **0.720** | 0.9 | 0.18 | ADEME |
-| **Lead** | **0.420** | 0.5 | 0.08 | ADEME |
+| **Lead / Plomb** | **0.420** | 0.5 | 0.08 | ADEME |
+| **Tin / Étain** | **1.50** | ~2.0 | ~0.5 | Estimated |
 | **Iron / Steel / Scrap** | **1.10** | 1.9 | 0.58 | FEDEREC/ADEME ACV 2017 |
-| **Cast iron** | **0.90** | 1.5 | 0.6 | ADEME |
+| **Cast iron / Fonte** | **0.90** | 1.5 | 0.6 | ADEME |
+| **Titanium** | **4.00** | ~5.0 | ~1.0 | Estimated |
+| **Magnesium** | **9.00** | ~10.0 | ~1.0 | Estimated |
+| **Chrome / Chromium** | **2.00** | ~2.5 | ~0.5 | Estimated |
+| **Tungsten / Carbide** | **3.00** | ~3.5 | ~0.5 | Estimated |
+| **Cobalt** | **7.00** | ~8.0 | ~1.0 | Estimated |
+| **Silver / Argent** | **7.00** | ~8.0 | ~1.0 | Estimated |
+| **Gold / Or** | **14.00** | ~16.0 | ~2.0 | Estimated (mining intensity) |
+| **Platinum / Platine** | **11.00** | ~13.0 | ~2.0 | Estimated |
+| **Palladium** | **9.00** | ~11.0 | ~2.0 | Estimated |
+| **Catalytic converter** | **4.50** | — | — | Pt + Pd + Rh recovery |
 | **E-waste / Electronics** | **3.50** | — | — | Estimated (precious metals) |
+| **Smartphone / Phone** | **4.00** | — | — | Li, Co, Ag, Au extraction |
 | **Lithium battery** | **4.00** | — | — | Li, Co, Ni extraction |
 | **Lead-acid battery** | **1.80** | — | — | Pb + acid |
+| **Car battery (lead)** | **0.90** | — | — | ~50% Pb content × 0.42 + steel |
+| **Cable / Wire** | **0.50** | — | — | Cu net gain + plastic sheath |
+| **Refrigerator / Fridge** | **1.80** | — | — | Cu + Al + refrigerant gases |
+| **Washing machine** | **1.50** | — | — | Steel + motor Cu |
+| **Air conditioner** | **2.00** | — | — | Cu + Al + refrigerant |
+| **Motor / Engine** | **1.50** | — | — | Steel + Cu winding mix |
+| **Alternator** | **2.00** | — | — | Cu winding dominant |
 | **Paper / Cardboard** | **0.050** | 0.92 | 0.87 | FEDEREC/ADEME ACV 2017 |
 | **PET Plastic** | **1.50** | 2.15 | 0.65 | ADEME 2024 |
-| **HDPE Plastic** | **1.40** | 2.0 | 0.6 | ADEME 2024 |
+| **HDPE / PE Plastic** | **1.40** | 2.0 | 0.6 | ADEME 2024 |
+| **PVC** | **0.80** | — | — | Lower gain (chlorine) |
+| **PP Plastic** | **1.50** | — | — | ADEME 2024 |
 | **Glass** | **0.240** | 0.53 | 0.29 | ADEME Base Carbone |
-| **Tires / Rubber** | **0.80** | — | — | Estimated |
+| **Tires / Pneus** | **0.80** | — | — | Estimated |
+| **Rubber / Caoutchouc** | **0.80** | — | — | Estimated |
+| **Textile / Clothing** | **0.40** | — | — | Estimated |
+| **Wood / Bois** | **0.30** | — | — | Estimated |
+| **Motor oil / Huile** | **1.50** | — | — | Re-refining vs virgin |
+| **Solar panel** | **2.00** | — | — | Si + Ag + Al |
 | **Default (unrecognized)** | **0.50** | — | — | Conservative value |
 
 ### CO₂ Produced by Recycling Process
@@ -194,4 +220,4 @@ ERRI = ((Lead diverted kg × 50) + (PM2.5 diverted kg × 10)) × density_multipl
 
 ---
 
-*FerayPro Tracer v1.7.1 — Open Source MIT — [ma.feraypro.com/methodologie](https://ma.feraypro.com/methodologie)*
+*FerayPro Tracer v1.7.2 — Open Source MIT — [ma.feraypro.com/methodologie](https://ma.feraypro.com/methodologie)*

@@ -5,7 +5,7 @@
 Automatically calculates CO₂ avoided and child health impact for every recycled waste batch. Built for [FerayPro](https://ma.feraypro.com) — a circular waste marketplace in Morocco, DRC, France, and the USA.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.7.1-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-1.7.2-blue.svg)](CHANGELOG.md)
 [![UNICEF Venture Fund](https://img.shields.io/badge/UNICEF-Venture%20Fund%202026-00aeef.svg)](https://unicefinnovationfund.org)
 
 ---
@@ -129,18 +129,43 @@ Key factors (Primary − Recycled = Net gain):
 |----------|----------|---------|----------|
 | Aluminum | **6.88 t/t** | 7.24 | 0.36 |
 | Copper | **0.141 t/t** | 1.445 | 1.304 |
-| Steel/Scrap | **1.10 t/t** | 1.9 | 0.58 |
+| Stainless steel / Inox | **2.10 t/t** | 2.8 | 0.7 |
+| Nickel | **6.00 t/t** | 6.5 | 0.5 |
+| Zinc | **0.720 t/t** | 0.9 | 0.18 |
+| Lead / Plomb | **0.420 t/t** | 0.5 | 0.08 |
+| Steel / Scrap | **1.10 t/t** | 1.9 | 0.58 |
+| Cast iron / Fonte | **0.90 t/t** | 1.5 | 0.6 |
+| Tin / Étain | **1.50 t/t** | ~2.0 | ~0.5 |
+| Titanium | **4.00 t/t** | ~5.0 | ~1.0 |
+| Cobalt | **7.00 t/t** | ~8.0 | ~1.0 |
+| Silver / Argent | **7.00 t/t** | ~8.0 | ~1.0 |
+| Gold / Or | **14.00 t/t** | ~16.0 | ~2.0 |
+| Platinum / Platine | **11.00 t/t** | ~13.0 | ~2.0 |
+| Catalytic converter | **4.50 t/t** | — | — |
+| Smartphone / Phone | **4.00 t/t** | — | — |
+| E-waste / Electronics | **3.50 t/t** | — | — |
+| Lithium battery | **4.00 t/t** | — | — |
+| Lead-acid battery | **1.80 t/t** | — | — |
+| Cable / Wire | **0.50 t/t** | — | — |
+| Motor / Engine | **1.50 t/t** | — | — |
 | PET Plastic | **1.50 t/t** | 2.15 | 0.65 |
-| Paper | **0.050 t/t** | 0.92 | 0.87 |
+| HDPE Plastic | **1.40 t/t** | 2.0 | 0.6 |
+| PVC | **0.80 t/t** | — | — |
+| Paper / Cardboard | **0.050 t/t** | 0.92 | 0.87 |
 | Glass | **0.240 t/t** | 0.53 | 0.29 |
+| Tires / Pneus | **0.80 t/t** | — | — |
+| Textile / Clothing | **0.40 t/t** | — | — |
+| Wood / Bois | **0.30 t/t** | — | — |
+| Motor oil / Huile | **1.50 t/t** | — | — |
+| Default (unrecognized) | **0.50 t/t** | — | — |
 
-Full table: [METHODOLOGY.md](METHODOLOGY.md)
+Full table + sources: [METHODOLOGY.md](METHODOLOGY.md)
 
 ---
 
 ## 🗺️ Roadmap
 
-### Phase 1 — MVP (Current — v1.7.1)
+### Phase 1 — MVP (Current — v1.7.2)
 - [x] CO₂ net gain engine (200+ materials, FR + EN + Darija/Lingala/Swahili NLP)
 - [x] CO₂ process factors for buyer dashboard (FEDEREC/ADEME LCA 2017)
 - [x] ERRI with population density multiplier
@@ -198,7 +223,7 @@ MIT License — Copyright (c) 2026 FerayPro
 ## 🏷️ Citation
 
 ```
-FerayPro Tracer v1.7.1 (2026). Open-source waste batch traceability plugin.
+FerayPro Tracer v1.7.2 (2026). Open-source waste batch traceability plugin.
 MIT License. https://github.com/feraypro/feraypro-tracer
 Methodology: https://ma.feraypro.com/methodologie
 ```
