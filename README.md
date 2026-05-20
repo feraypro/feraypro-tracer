@@ -225,7 +225,6 @@ MIT License — Copyright (c) 2026 FerayPro
 ```
 FerayPro Tracer v1.7.2 (2026). Open-source waste batch traceability plugin.
 MIT License. https://github.com/feraypro/feraypro-tracer
-Methodology: https://ma.feraypro.com/methodologie
 ```
 
 ---
