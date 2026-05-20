@@ -2,7 +2,7 @@
 
 **Open-source waste batch traceability plugin for WordPress / HivePress**
 
-Automatically calculates CO₂ avoided and child health impact for every recycled waste batch. Built for [FerayPro](https://ma.feraypro.com) — a circular waste marketplace in Morocco, DRC, France, and the USA.
+Automatically calculates CO₂ avoided and child health impact for every recycled waste batch. Built for [FerayPro Morrocco](https://ma.feraypro.com), [FerayPro DRC](https://cd.feraypro.com) and [FerayPro France](https://fr.feraypro.com) — a circular waste marketplace in Morocco, DRC, France, and the USA.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/Version-1.7.2-blue.svg)](CHANGELOG.md)
