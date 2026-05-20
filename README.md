@@ -14,10 +14,10 @@ Automatically calculates CO₂ avoided and child health impact for every recycle
 
 | Site | Dashboard | Methodology |
 |------|-----------|-------------|
-| Morocco | [ma.feraypro.com/impact](https://ma.feraypro.com/impact) | [ma.feraypro.com/methodologie](https://ma.feraypro.com/methodologie) |
-| DRC | [cd.feraypro.com/impact](https://cd.feraypro.com/impact) | — |
-| France | [fr.feraypro.com/impact](https://fr.feraypro.com/impact) | — |
-| USA | [us.feraypro.com/impact](https://us.feraypro.com/impact) | — |
+| Morocco | [ma.feraypro.com/impact](https://ma.feraypro.com/impact) | METHODOLOGY.md |
+| DRC | [cd.feraypro.com/impact](https://cd.feraypro.com/impact) | — | METHODOLOGY.md
+| France | [fr.feraypro.com/impact](https://fr.feraypro.com/impact) | — | METHODOLOGY.md
+| USA | [us.feraypro.com/impact](https://us.feraypro.com/impact) | — | METHODOLOGY.md
 
 ---
 
