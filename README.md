@@ -2,7 +2,7 @@
 
 **Open-source waste batch traceability plugin for WordPress / HivePress**
 
-Automatically calculates CO₂ avoided and child health impact for every recycled waste batch. Built for [FerayPro](https://ma.feraypro.com) — a circular waste marketplace in Morocco, DRC, France, and the USA.
+Automatically calculates CO₂ avoided and child health impact for every recycled waste batch. Built for [FerayPro Morrocco](https://ma.feraypro.com), [FerayPro DRC](https://cd.feraypro.com), [FerayPro France](https://fr.feraypro.com) — a circular waste marketplace in Morocco, DRC, France, and the USA.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/Version-1.7.3-blue.svg)](CHANGELOG.md)
@@ -14,8 +14,7 @@ Automatically calculates CO₂ avoided and child health impact for every recycle
 
 | Site | Dashboard | Methodology |
 |------|-----------|-------------|
-| Morocco | [ma.feraypro.com/impact](https://ma.feraypro.com/impact) | [ma.feraypro.com/methodologie](https://ma.feraypro.com/methodologie) |
-| DRC | [cd.feraypro.com/impact](https://cd.feraypro.com/impact) | — |
+| Morocco | [ma.feraypro.com/impact](https://ma.feraypro.com/impact) | [METHODOLOGY.md](METHODOLOGY.md)
 | France | [fr.feraypro.com/impact](https://fr.feraypro.com/impact) | — |
 | USA | [us.feraypro.com/impact](https://us.feraypro.com/impact) | — |
 
@@ -243,7 +242,6 @@ MIT License — Copyright (c) 2026 FerayPro
 ```
 FerayPro Tracer v1.7.3 (2026). Open-source waste batch traceability plugin.
 MIT License. https://github.com/feraypro/feraypro-tracer
-Methodology: https://ma.feraypro.com/methodologie
 ```
 
 ---
