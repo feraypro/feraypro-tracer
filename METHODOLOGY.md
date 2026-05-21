@@ -1,8 +1,9 @@
 # FerayPro Tracer — Calculation Methodology
 
 **Last updated:** 2026  
-**Version:** 1.7.2  
+**Version:** 1.7.3  
 **License:** MIT  
+**Live demo:** [ma.feraypro.com/methodologie](https://ma.feraypro.com/methodologie)
 
 ---
 
@@ -219,4 +220,4 @@ ERRI = ((Lead diverted kg × 50) + (PM2.5 diverted kg × 10)) × density_multipl
 
 ---
 
-*FerayPro Tracer v1.7.2 — Open Source MIT *
+*FerayPro Tracer v1.7.3 — Open Source MIT — [ma.feraypro.com/methodologie](https://ma.feraypro.com/methodologie)*

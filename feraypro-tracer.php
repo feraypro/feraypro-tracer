@@ -3,7 +3,7 @@
  * Plugin Name: FerayPro Tracer
  * Plugin URI: https://ma.feraypro.com/impact
  * Description: Traçabilité des lots de déchets recyclés avec calcul CO₂ évité et génération de QR code. Module open source pour UNICEF Venture Fund.
- * Version: 1.7.2
+ * Version: 1.7.3
  * Author: FerayPro
  * License: MIT
  * Text Domain: feraypro-tracer
@@ -11,7 +11,9 @@
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'FPT_VERSION', '1.7.2' );
+define( 'FPT_VERSION',    '1.7.3' );
+define( 'FPT_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
+define( 'FPT_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
 // ─── Normalisation texte multilingue ─────────────────────────────────────────
 // Supporte FR, EN + translittérations Darija, Lingala, Swahili de base
@@ -709,7 +711,43 @@ function fpt_inject_on_listing( $content ) {
     $poids_t   = round( $poids_kg / 1000, 4 );
     $calc_line = $poids_t . ' t × ' . $detected_factor . ' = ' . number_format( $co2, 4 ) . ' t CO₂';
 
-    ob_start(); ?>
+    ob_start();
+
+    // ── Badge partenaire EN PREMIER si ce lot vient d'un partenaire ──────────
+    $fpt_ref        = get_post_meta( $post_id, '_fpt_ref', true );
+    $fpt_partenaire = $fpt_ref ? fpt_get_partenaire_by_slug( $fpt_ref ) : null;
+    if ( $fpt_partenaire ):
+        $p_couleur = esc_attr( $fpt_partenaire['couleur'] ?? '#1a7a4a' );
+        $p_nom     = esc_html( $fpt_partenaire['nom'] );
+        $p_logo    = ! empty( $fpt_partenaire['logo_url'] ) ? esc_url( $fpt_partenaire['logo_url'] ) : '';
+    ?>
+    <div class="fpt-partner-banner" style="
+        display:flex;align-items:center;gap:12px;
+        padding:10px 18px;
+        background:<?php echo $p_couleur; ?>14;
+        border:2px solid <?php echo $p_couleur; ?>;
+        border-radius:10px;
+        margin-bottom:12px;
+        font-family:var(--fpt-sans,sans-serif);
+    ">
+        <?php if ( $p_logo ): ?>
+            <img src="<?php echo $p_logo; ?>"
+                 alt="<?php echo $p_nom; ?>"
+                 style="height:28px;width:auto;object-fit:contain;flex-shrink:0">
+        <?php else: ?>
+            <span style="font-size:22px;flex-shrink:0">🤝</span>
+        <?php endif; ?>
+        <div style="display:flex;flex-direction:column;gap:1px">
+            <span style="font-size:11px;color:<?php echo $p_couleur; ?>;font-weight:700;text-transform:uppercase;letter-spacing:0.08em">
+                <?php echo fpt_t('Recommandé par','Recommended by'); ?>
+            </span>
+            <span style="font-size:15px;font-weight:700;color:#0f1c13">
+                <?php echo $p_nom; ?>
+            </span>
+        </div>
+    </div>
+    <?php endif; ?>
+
     <div class="fpt-inline-block">
         <div class="fpt-inline-header">
             <span class="fpt-inline-icon">🌱</span>
@@ -855,8 +893,6 @@ function fpt_inject_on_listing( $content ) {
     $block = ob_get_clean();
     return $content . $block;
 }
-define( 'FPT_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
-define( 'FPT_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
 // ─── Facteurs CO₂ évité par tonne (source ADEME / Base Carbone) ───────────────
 function fpt_co2_factors() {
@@ -2330,4 +2366,419 @@ function fpt_admin_page() {
         </table>
     </div>
     <?php
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SYSTÈME PARTENAIRES — Affiliate tracking
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ─── 1. Capture du ?ref= à l'arrivée du visiteur ─────────────────────────────
+add_action( 'init', 'fpt_capture_ref' );
+function fpt_capture_ref() {
+    if ( empty( $_GET['ref'] ) ) return;
+    $ref = sanitize_key( $_GET['ref'] );
+
+    // Vérifier que ce ref correspond à un partenaire actif
+    $partenaires = fpt_get_partenaires_list();
+    $slugs = array_column( $partenaires, 'slug' );
+    if ( ! in_array( $ref, $slugs, true ) ) return;
+
+    // Sauvegarder dans un cookie 30 jours
+    if ( ! headers_sent() ) {
+        setcookie( 'fpt_ref', $ref, time() + ( 30 * DAY_IN_SECONDS ), COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true );
+    }
+    $_COOKIE['fpt_ref'] = $ref;
+}
+
+// ─── 2. Attacher le partenaire au lot à la publication ───────────────────────
+add_action( 'save_post_hp_listing', 'fpt_attach_ref_to_listing', 25, 3 );
+function fpt_attach_ref_to_listing( $post_id, $post, $update ) {
+    if ( defined('DOING_AUTOSAVE') && DOING_AUTOSAVE ) return;
+    if ( $post->post_status !== 'publish' ) return;
+
+    // Ne pas écraser si déjà défini
+    $existing = get_post_meta( $post_id, '_fpt_ref', true );
+    if ( $existing ) return;
+
+    $ref = isset( $_COOKIE['fpt_ref'] ) ? sanitize_key( $_COOKIE['fpt_ref'] ) : '';
+    if ( ! $ref ) return;
+
+    // Vérifier que le partenaire est toujours actif
+    $partenaires = fpt_get_partenaires_list();
+    $slugs = array_column( $partenaires, 'slug' );
+    if ( ! in_array( $ref, $slugs, true ) ) return;
+
+    update_post_meta( $post_id, '_fpt_ref', $ref );
+}
+
+// ─── 3. Badge sur l'annonce publique ─────────────────────────────────────────
+// Injecté via fpt_inject_on_listing() déjà existant — on ajoute un filtre
+add_filter( 'fpt_after_inline_block', 'fpt_render_partner_badge', 10, 1 );
+function fpt_render_partner_badge( $post_id ) {
+    $ref = get_post_meta( $post_id, '_fpt_ref', true );
+    if ( ! $ref ) return '';
+
+    $partenaire = fpt_get_partenaire_by_slug( $ref );
+    if ( ! $partenaire ) return '';
+
+    $nom    = esc_html( $partenaire['nom'] );
+    $couleur = esc_attr( $partenaire['couleur'] );
+    $logo   = ! empty( $partenaire['logo_url'] ) ? $partenaire['logo_url'] : '';
+
+    $logo_html = $logo
+        ? '<img src="' . esc_url( $logo ) . '" alt="' . $nom . '" style="height:16px;vertical-align:middle;margin-right:6px;border-radius:2px">'
+        : '';
+
+    return '<div class="fpt-partner-badge" style="
+        display:inline-flex;align-items:center;gap:6px;
+        margin-top:10px;padding:6px 12px;
+        background:' . $couleur . '18;
+        border:1.5px solid ' . $couleur . ';
+        border-radius:20px;font-family:var(--fpt-sans,sans-serif);
+        font-size:12px;font-weight:600;color:' . $couleur . ';
+    ">' . $logo_html . '⭐ ' . fpt_t('Recommandé par','Recommended by') . ' ' . $nom . '</div>';
+}
+
+// Badge intégré directement dans fpt_inject_on_listing — voir ci-dessous
+
+// ─── 4. Données des partenaires ───────────────────────────────────────────────
+function fpt_get_partenaires_list() {
+    $raw = get_option( 'fpt_partenaires', [] );
+    if ( ! is_array( $raw ) ) return [];
+    return $raw;
+}
+
+function fpt_get_partenaire_by_slug( $slug ) {
+    foreach ( fpt_get_partenaires_list() as $p ) {
+        if ( isset( $p['slug'] ) && $p['slug'] === $slug ) return $p;
+    }
+    return null;
+}
+
+// ─── 5. Stats partenaire — nombre de lots, kg, CO₂ ───────────────────────────
+function fpt_get_stats_partenaire( $slug ) {
+    $lots = get_posts([
+        'post_type'      => 'hp_listing',
+        'post_status'    => 'publish',
+        'numberposts'    => -1,
+        'fields'         => 'ids',
+        'meta_query'     => [[ 'key' => '_fpt_ref', 'value' => sanitize_key($slug) ]],
+    ]);
+
+    $total_lots  = count( $lots );
+    $total_poids = 0;
+    $total_co2   = 0;
+    $total_collected = 0;
+
+    foreach ( $lots as $id ) {
+        $total_poids     += fpt_get_poids_kg( $id );
+        $total_co2       += (float) get_post_meta( $id, '_fpt_co2_avoided', true );
+        if ( get_post_meta( $id, '_fpt_collected', true ) == '1' ) $total_collected++;
+    }
+
+    return [
+        'lots'      => $total_lots,
+        'collected' => $total_collected,
+        'poids_kg'  => round( $total_poids, 1 ),
+        'co2_t'     => round( $total_co2, 4 ),
+        'ids'       => $lots,
+    ];
+}
+
+// ─── 6. Sous-menu admin "Partenaires" ─────────────────────────────────────────
+add_action( 'admin_menu', 'fpt_admin_menu_partenaires' );
+function fpt_admin_menu_partenaires() {
+    add_submenu_page(
+        'feraypro-tracer',
+        'Partenaires',
+        '🤝 Partenaires',
+        'manage_options',
+        'feraypro-partenaires',
+        'fpt_admin_page_partenaires'
+    );
+}
+
+function fpt_admin_page_partenaires() {
+    if ( ! current_user_can('manage_options') ) wp_die('Accès refusé');
+
+    // ── Sauvegarde ajout/modif partenaire ──
+    if ( isset( $_POST['fpt_save_partenaire'] ) && check_admin_referer('fpt_partenaire_save') ) {
+        $slug    = sanitize_key( $_POST['fpt_p_slug'] );
+        $nom     = sanitize_text_field( $_POST['fpt_p_nom'] );
+        $couleur = sanitize_hex_color( $_POST['fpt_p_couleur'] ) ?: '#1a7a4a';
+        $logo    = esc_url_raw( $_POST['fpt_p_logo'] );
+        $actif   = isset( $_POST['fpt_p_actif'] ) ? 1 : 0;
+        $commission = floatval( $_POST['fpt_p_commission'] );
+
+        if ( $slug && $nom ) {
+            $liste = fpt_get_partenaires_list();
+            // Mettre à jour si slug existe déjà, sinon ajouter
+            $found = false;
+            foreach ( $liste as &$p ) {
+                if ( $p['slug'] === $slug ) {
+                    $p = compact('slug','nom','couleur','logo','actif','commission');
+                    $found = true; break;
+                }
+            }
+            unset($p);
+            if ( ! $found ) {
+                $liste[] = compact('slug','nom','couleur','logo','actif','commission');
+            }
+            update_option( 'fpt_partenaires', $liste );
+            echo '<div class="notice notice-success"><p>✅ Partenaire "' . esc_html($nom) . '" sauvegardé.</p></div>';
+        }
+    }
+
+    // ── Suppression partenaire ──
+    if ( isset( $_GET['fpt_delete_ref'] ) && check_admin_referer('fpt_delete_ref') ) {
+        $slug  = sanitize_key( $_GET['fpt_delete_ref'] );
+        $liste = array_filter( fpt_get_partenaires_list(), fn($p) => $p['slug'] !== $slug );
+        update_option( 'fpt_partenaires', array_values($liste) );
+        echo '<div class="notice notice-success"><p>Partenaire supprimé.</p></div>';
+    }
+
+    $partenaires = fpt_get_partenaires_list();
+    ?>
+    <div class="wrap">
+        <h1>🤝 Partenaires FerayPro</h1>
+        <p style="color:#6b8070">
+            Chaque partenaire dispose d'un lien de suivi :
+            <code><?php echo esc_url( home_url('/') ); ?><strong>?ref=slug-partenaire</strong></code><br>
+            Quand un visiteur arrive via ce lien et publie une annonce, le lot lui est automatiquement attribué (cookie 30 jours).
+        </p>
+
+        <?php if ( ! empty($partenaires) ): ?>
+        <!-- ── Tableau des stats ── -->
+        <h2>📊 Stats par partenaire</h2>
+        <table class="widefat striped" style="max-width:900px;margin-bottom:30px">
+            <thead>
+                <tr>
+                    <th>Partenaire</th>
+                    <th>Slug / Lien</th>
+                    <th style="text-align:center">Lots publiés</th>
+                    <th style="text-align:center">Collectés</th>
+                    <th style="text-align:right">Poids (kg)</th>
+                    <th style="text-align:right">CO₂ évité (t)</th>
+                    <th style="text-align:right">Commission %</th>
+                    <th style="text-align:center">Statut</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ( $partenaires as $p ):
+                $stats   = fpt_get_stats_partenaire( $p['slug'] );
+                $couleur = esc_attr( $p['couleur'] ?? '#1a7a4a' );
+                $actif   = ! empty( $p['actif'] );
+                $lien    = add_query_arg( 'ref', $p['slug'], home_url('/') );
+                ?>
+                <tr>
+                    <td>
+                        <span style="display:inline-flex;align-items:center;gap:8px">
+                            <span style="width:12px;height:12px;border-radius:50%;background:<?php echo $couleur; ?>;display:inline-block;flex-shrink:0"></span>
+                            <?php if ( ! empty($p['logo_url']) ): ?>
+                                <img src="<?php echo esc_url($p['logo_url']); ?>" style="height:20px;object-fit:contain">
+                            <?php endif; ?>
+                            <strong><?php echo esc_html($p['nom']); ?></strong>
+                        </span>
+                    </td>
+                    <td>
+                        <code style="font-size:11px"><?php echo esc_html($p['slug']); ?></code><br>
+                        <a href="<?php echo esc_url($lien); ?>" target="_blank" style="font-size:11px">🔗 <?php echo esc_html($lien); ?></a>
+                    </td>
+                    <td style="text-align:center"><strong><?php echo $stats['lots']; ?></strong></td>
+                    <td style="text-align:center"><?php echo $stats['collected']; ?></td>
+                    <td style="text-align:right"><?php echo number_format($stats['poids_kg'], 1, ',', ' '); ?> kg</td>
+                    <td style="text-align:right;color:#1a7a4a"><strong><?php echo number_format($stats['co2_t'], 3, ',', ' '); ?> t</strong></td>
+                    <td style="text-align:right"><?php echo number_format($p['commission'] ?? 0, 1); ?>%</td>
+                    <td style="text-align:center">
+                        <?php if ($actif): ?>
+                            <span style="color:#1a7a4a;font-weight:600">✅ Actif</span>
+                        <?php else: ?>
+                            <span style="color:#c0392b">⏸ Inactif</span>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <a href="#form-<?php echo esc_attr($p['slug']); ?>"
+                           onclick="fptFillForm(<?php echo esc_attr(json_encode($p)); ?>)"
+                           class="button button-small">✏️ Modifier</a>
+                        &nbsp;
+                        <a href="<?php echo wp_nonce_url( add_query_arg(['page'=>'feraypro-partenaires','fpt_delete_ref'=>$p['slug']], admin_url('admin.php')), 'fpt_delete_ref' ); ?>"
+                           class="button button-small"
+                           style="color:#c0392b;border-color:#c0392b"
+                           onclick="return confirm('Supprimer <?php echo esc_js($p['nom']); ?> ?')">🗑 Supprimer</a>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        <?php endif; ?>
+
+        <!-- ── Formulaire ajout / modification ── -->
+        <h2 id="form-new">➕ Ajouter / Modifier un partenaire</h2>
+        <form method="post" style="max-width:600px;background:#fff;border:1px solid #d0ddd4;padding:24px;border-radius:8px" id="fpt-partner-form">
+            <?php wp_nonce_field('fpt_partenaire_save'); ?>
+
+            <table class="form-table" role="presentation">
+                <tr>
+                    <th><label for="fpt_p_nom">Nom affiché</label></th>
+                    <td><input type="text" id="fpt_p_nom" name="fpt_p_nom" class="regular-text" placeholder="Avito Maroc" required></td>
+                </tr>
+                <tr>
+                    <th><label for="fpt_p_slug">Slug (URL)</label></th>
+                    <td>
+                        <input type="text" id="fpt_p_slug" name="fpt_p_slug" class="regular-text" placeholder="avito" pattern="[a-z0-9\-]+" required>
+                        <p class="description">Minuscules, chiffres et tirets uniquement. Ex: <code>avito</code>, <code>leboncoin</code>, <code>jumia</code></p>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="fpt_p_couleur">Couleur du badge</label></th>
+                    <td>
+                        <input type="color" id="fpt_p_couleur" name="fpt_p_couleur" value="#1a7a4a" style="height:36px;width:60px;cursor:pointer">
+                        <span style="font-size:12px;color:#6b8070;margin-left:8px">Couleur de la marque partenaire</span>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label>Logo</label></th>
+                    <td>
+                        <!-- Champ caché qui stocke l'URL finale -->
+                        <input type="hidden" id="fpt_p_logo" name="fpt_p_logo" value="">
+
+                        <!-- Prévisualisation -->
+                        <div id="fpt-logo-preview" style="margin-bottom:10px;min-height:40px">
+                            <img id="fpt-logo-img" src="" alt="" style="height:40px;object-fit:contain;display:none;border:1px solid #d0ddd4;border-radius:4px;padding:4px;background:#f9f9f9">
+                        </div>
+
+                        <button type="button" id="fpt-logo-upload-btn" class="button">
+                            📁 Choisir depuis la médiathèque
+                        </button>
+                        <button type="button" id="fpt-logo-remove-btn" class="button" style="margin-left:6px;display:none;color:#c0392b;border-color:#c0392b">
+                            ✕ Supprimer le logo
+                        </button>
+                        <p class="description" style="margin-top:6px">Optionnel — PNG ou SVG, hauteur recommandée 32px</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="fpt_p_commission">Commission (%)</label></th>
+                    <td>
+                        <input type="number" id="fpt_p_commission" name="fpt_p_commission" value="0" min="0" max="100" step="0.1" style="width:80px">
+                        <span style="font-size:12px;color:#6b8070;margin-left:8px">% de commission sur chaque lot collecté (info seulement)</span>
+                    </td>
+                </tr>
+                <tr>
+                    <th>Statut</th>
+                    <td>
+                        <label>
+                            <input type="checkbox" id="fpt_p_actif" name="fpt_p_actif" value="1" checked>
+                            Partenaire actif (les ?ref= de ce partenaire sont capturés)
+                        </label>
+                    </td>
+                </tr>
+            </table>
+
+            <p style="margin-top:16px">
+                <button type="submit" name="fpt_save_partenaire" class="button button-primary" style="background:#1a7a4a;border-color:#1a7a4a">
+                    💾 Sauvegarder le partenaire
+                </button>
+                <button type="button" class="button" onclick="fptResetForm()" style="margin-left:8px">✕ Annuler</button>
+            </p>
+        </form>
+
+        <script>
+        // ── Médiathèque WordPress ──────────────────────────────────────────────
+        var fptMediaFrame;
+        document.getElementById('fpt-logo-upload-btn').addEventListener('click', function(e) {
+            e.preventDefault();
+            if ( fptMediaFrame ) { fptMediaFrame.open(); return; }
+            fptMediaFrame = wp.media({
+                title:    'Choisir le logo du partenaire',
+                button:   { text: 'Utiliser ce logo' },
+                multiple: false,
+                library:  { type: [ 'image' ] }
+            });
+            fptMediaFrame.on('select', function() {
+                var attachment = fptMediaFrame.state().get('selection').first().toJSON();
+                fptSetLogo( attachment.url );
+            });
+            fptMediaFrame.open();
+        });
+
+        document.getElementById('fpt-logo-remove-btn').addEventListener('click', function() {
+            fptSetLogo('');
+        });
+
+        function fptSetLogo( url ) {
+            document.getElementById('fpt_p_logo').value = url;
+            var img = document.getElementById('fpt-logo-img');
+            var removeBtn = document.getElementById('fpt-logo-remove-btn');
+            if ( url ) {
+                img.src = url;
+                img.style.display = 'inline-block';
+                removeBtn.style.display = 'inline-block';
+            } else {
+                img.src = '';
+                img.style.display = 'none';
+                removeBtn.style.display = 'none';
+            }
+        }
+
+        // ── Remplir le formulaire depuis le bouton Modifier ───────────────────
+        function fptFillForm(p) {
+            document.getElementById('fpt_p_nom').value        = p.nom        || '';
+            document.getElementById('fpt_p_slug').value       = p.slug       || '';
+            document.getElementById('fpt_p_couleur').value    = p.couleur    || '#1a7a4a';
+            document.getElementById('fpt_p_commission').value = p.commission || 0;
+            document.getElementById('fpt_p_actif').checked    = p.actif == 1;
+            fptSetLogo( p.logo_url || '' );
+            // Scroll vers le formulaire
+            var form = document.getElementById('fpt-partner-form');
+            form.id  = 'form-' + p.slug;
+            form.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function fptResetForm() {
+            document.getElementById('fpt_p_nom').value        = '';
+            document.getElementById('fpt_p_slug').value       = '';
+            document.getElementById('fpt_p_couleur').value    = '#1a7a4a';
+            document.getElementById('fpt_p_commission').value = 0;
+            document.getElementById('fpt_p_actif').checked    = true;
+            fptSetLogo('');
+            document.getElementById('fpt-partner-form').id = 'form-new';
+        }
+        </script>
+    </div>
+    <?php
+    // Charger la médiathèque WP sur cette page admin
+    wp_enqueue_media();
+}
+
+// ─── 7. Shortcode [fpt_partenaires] — page publique optionnelle ───────────────
+add_shortcode( 'fpt_partenaires', 'fpt_shortcode_partenaires' );
+function fpt_shortcode_partenaires( $atts ) {
+    $atts = shortcode_atts( [ 'show_co2' => 'yes' ], $atts );
+    $partenaires = array_filter( fpt_get_partenaires_list(), fn($p) => ! empty($p['actif']) );
+    if ( empty($partenaires) ) return '';
+
+    ob_start();
+    echo '<div class="fpt-partenaires-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin:24px 0">';
+    foreach ( $partenaires as $p ) {
+        $stats   = fpt_get_stats_partenaire( $p['slug'] );
+        $couleur = esc_attr( $p['couleur'] ?? '#1a7a4a' );
+        echo '<div style="background:#fff;border:2px solid ' . $couleur . ';border-radius:12px;padding:20px;text-align:center">';
+        if ( ! empty($p['logo_url']) ) {
+            echo '<img src="' . esc_url($p['logo_url']) . '" style="height:32px;object-fit:contain;margin-bottom:10px"><br>';
+        }
+        echo '<strong style="color:' . $couleur . ';font-size:15px">' . esc_html($p['nom']) . '</strong><br>';
+        echo '<span style="font-size:13px;color:#6b8070;margin-top:6px;display:block">';
+        echo $stats['lots'] . ' ' . fpt_t('lots recommandés','recommended batches');
+        echo '</span>';
+        if ( $atts['show_co2'] === 'yes' ) {
+            echo '<span style="font-size:12px;color:#1a7a4a;font-weight:600;display:block;margin-top:4px">';
+            echo number_format( $stats['co2_t'] * 1000, 0, ',', ' ') . ' kg CO₂ évité';
+            echo '</span>';
+        }
+        echo '</div>';
+    }
+    echo '</div>';
+    return ob_get_clean();
 }

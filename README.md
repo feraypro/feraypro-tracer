@@ -2,10 +2,10 @@
 
 **Open-source waste batch traceability plugin for WordPress / HivePress**
 
-Automatically calculates CO₂ avoided and child health impact for every recycled waste batch. Built for [FerayPro Morrocco](https://ma.feraypro.com), [FerayPro DRC](https://cd.feraypro.com) and [FerayPro France](https://fr.feraypro.com) — a circular waste marketplace in Morocco, DRC, France.
+Automatically calculates CO₂ avoided and child health impact for every recycled waste batch. Built for [FerayPro](https://ma.feraypro.com) — a circular waste marketplace in Morocco, DRC, France, and the USA.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.7.2-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-1.7.3-blue.svg)](CHANGELOG.md)
 [![UNICEF Venture Fund](https://img.shields.io/badge/UNICEF-Venture%20Fund%202026-00aeef.svg)](https://unicefinnovationfund.org)
 
 ---
@@ -14,10 +14,10 @@ Automatically calculates CO₂ avoided and child health impact for every recycle
 
 | Site | Dashboard | Methodology |
 |------|-----------|-------------|
-| Morocco | [ma.feraypro.com/impact](https://ma.feraypro.com/impact) | METHODOLOGY.md |
-| DRC | [cd.feraypro.com/impact](https://cd.feraypro.com/impact) | — | METHODOLOGY.md
-| France | [fr.feraypro.com/impact](https://fr.feraypro.com/impact) | — | METHODOLOGY.md
-| USA | [us.feraypro.com/impact](https://us.feraypro.com/impact) | — | METHODOLOGY.md
+| Morocco | [ma.feraypro.com/impact](https://ma.feraypro.com/impact) | [ma.feraypro.com/methodologie](https://ma.feraypro.com/methodologie) |
+| DRC | [cd.feraypro.com/impact](https://cd.feraypro.com/impact) | — |
+| France | [fr.feraypro.com/impact](https://fr.feraypro.com/impact) | — |
+| USA | [us.feraypro.com/impact](https://us.feraypro.com/impact) | — |
 
 ---
 
@@ -89,22 +89,40 @@ Full methodology: [METHODOLOGY.md](METHODOLOGY.md)
 | `[fpt_lot id="241"]` | Public traceability page for a batch |
 | `[fpt_methodologie]` | Calculation methodology page |
 | `[fpt_acheteur id="XXX"]` | Buyer dashboard — CO₂ produced by recycling |
-| `[fpt_partenaires]` | Partner traffic source dashboard |
+| `[fpt_partenaires]` | Public partner grid — logos, batch count, CO₂ avoided per partner |
 
 ---
 
-## 🤝 Partner Tracking
+## 🤝 Partner Tracking — Affiliate System
 
-A key feature for community mobilization — schools, municipalities, and NGOs can organize waste collection campaigns and track their collective impact:
+Traffic platforms (Avito, LeBonCoin, Jumia…) send visitors via a unique referral link. When a visitor publishes a listing, the batch is automatically attributed to the partner.
 
 ```
-https://ma.feraypro.com/?ref=school-name
-https://ma.feraypro.com/?ref=ngo-kinshasa
+https://ma.feraypro.com/?ref=avito
+https://ma.feraypro.com/?ref=leboncoin
 ```
 
-When a visitor arrives via this link and publishes a listing, the batch is automatically tagged. View all partner batches and their CO₂ impact at `[fpt_partenaires]`.
+**How it works:**
+1. Visitor arrives via `?ref=avito` → slug stored in a **30-day cookie**
+2. Visitor publishes a listing → `_fpt_ref=avito` saved to the batch post meta
+3. **Banner displayed first** on the listing page, above all content:
+   ```
+   ┌──────────────────────────────────────┐
+   │  [AVITO LOGO]  Recommended by        │
+   │                Avito Maroc           │
+   └──────────────────────────────────────┘
+   ```
+4. Admin dashboard (**FP Tracer → 🤝 Partners**) shows per-partner stats: batches referred, collected, total weight, CO₂ avoided, commission %
 
-This feature enables **community-level recycling campaigns** targeting the neighborhoods where children live near informal recycling sites.
+**Admin features:**
+- Add/edit/delete partners from WordPress admin — no code changes needed
+- Upload partner logo via WordPress media library
+- Set partner color (used for the badge border and background tint)
+- Set commission % (informational — for revenue sharing tracking)
+- Toggle active/inactive — inactive partners' `?ref=` links are ignored
+- Copy-ready referral link for each partner
+
+**Security:** only registered active partners are tracked. Unknown `?ref=` values are silently ignored.
 
 ---
 
@@ -165,7 +183,7 @@ Full table + sources: [METHODOLOGY.md](METHODOLOGY.md)
 
 ## 🗺️ Roadmap
 
-### Phase 1 — MVP (Current — v1.7.2)
+### Phase 1 — MVP (Current — v1.7.3)
 - [x] CO₂ net gain engine (200+ materials, FR + EN + Darija/Lingala/Swahili NLP)
 - [x] CO₂ process factors for buyer dashboard (FEDEREC/ADEME LCA 2017)
 - [x] ERRI with population density multiplier
@@ -179,7 +197,7 @@ Full table + sources: [METHODOLOGY.md](METHODOLOGY.md)
 - [x] Prix du jour block — buyer prices on each listing
 - [x] Collection confirmation (admin metabox)
 - [x] Buyer dashboard (`[fpt_acheteur]`)
-- [x] Partner tracking + community campaign dashboard
+- [x] **Partner affiliate tracking** — `?ref=` cookie, banner on listing, admin dashboard with stats, logo upload via media library, commission tracking
 
 ### Phase 2 — ML Refinement (2026–2027)
 - [ ] Random Forest model (Morocco + DRC field data)
@@ -223,8 +241,9 @@ MIT License — Copyright (c) 2026 FerayPro
 ## 🏷️ Citation
 
 ```
-FerayPro Tracer v1.7.2 (2026). Open-source waste batch traceability plugin.
+FerayPro Tracer v1.7.3 (2026). Open-source waste batch traceability plugin.
 MIT License. https://github.com/feraypro/feraypro-tracer
+Methodology: https://ma.feraypro.com/methodologie
 ```
 
 ---
