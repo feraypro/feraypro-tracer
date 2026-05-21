@@ -220,4 +220,4 @@ ERRI = ((Lead diverted kg × 50) + (PM2.5 diverted kg × 10)) × density_multipl
 
 ---
 
-*FerayPro Tracer v1.7.3 — Open Source MIT — [ma.feraypro.com/methodologie](https://ma.feraypro.com/methodologie)*
+*FerayPro Tracer v1.7.3 — Open Source MIT *
