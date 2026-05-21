@@ -4,6 +4,44 @@ All notable changes to FerayPro Tracer are documented here.
 
 ---
 
+## [1.7.3] — 2026
+
+### Added
+- **Partner affiliate tracking system** — full implementation
+  - `?ref=slug` cookie capture (30 days) — only registered active partners are tracked
+  - Auto-attach `_fpt_ref` to listing post meta on publish (first-click wins, never overwritten)
+  - **Partner banner on listing page** — displayed first, above all content, with partner logo and brand color
+  - Logo upload via WordPress media library (replaces manual URL field)
+  - Admin page **FP Tracer → 🤝 Partenaires** — add/edit/delete partners, per-partner stats (lots, collected, kg, CO₂, commission %)
+  - Copy-ready referral link per partner
+  - Active/inactive toggle — inactive partners' `?ref=` links are silently ignored
+  - `[fpt_partenaires]` shortcode — public partner grid with logos, batch count, CO₂ avoided
+  - `fpt_get_partenaires_list()`, `fpt_get_partenaire_by_slug()`, `fpt_get_stats_partenaire()` helpers
+
+### Fixed
+- **CSS loading failure** — `FPT_PLUGIN_DIR` and `FPT_PLUGIN_URL` were defined at line 894 (mid-file, after function closures) — moved to lines 14–16, immediately after `FPT_VERSION`, before any hook registration
+
+---
+
+## [1.7.2] — 2026
+
+### Fixed
+- **Fatal error: `fpt_normalize_text()` called before definition** — function was defined at line ~1427 but called at line ~283; moved to line 18, immediately after `define('FPT_VERSION')`
+- **Fatal error: `fpt_key_poids()` missing** in problem version — confirmed intact
+- **`fpt_mask_phone()` / `fpt_whatsapp_btn()` missing** in problem version — confirmed intact; phone masking restored
+
+### Added
+- **`fpt_get_population_density_multiplier()`** — country-aware ERRI density multiplier (was missing from deployed version)
+- **Health keywords extended to EN** — all four pollutant keyword arrays now include English terms (lead, battery, wire, copper, screen, lamp…)
+- **Independent co-occurrence** — each pollutant analyzed with its own `foreach`/`break` loop; a batch can contribute to multiple pollutants simultaneously
+
+### Changed
+- METHODOLOGY.md CO₂ factors table expanded from 19 to 42 materials — aligned with full `fpt_co2_factors()` array in PHP
+- README.md CO₂ table expanded from 6 to 32 materials — aligned with PHP
+- All versions bumped to 1.7.2
+
+---
+
 ## [1.7.1] — 2026
 
 ### Fixed — Critical bugs (audit-ready)
@@ -114,4 +152,4 @@ All notable changes to FerayPro Tracer are documented here.
 
 ---
 
-*FerayPro Tracer — Open Source MIT — [github.com/feraypro/feraypro-tracer](https://github.com/feraypro/feraypro-tracer)*
+*FerayPro Tracer v1.7.3 — Open Source MIT — [github.com/feraypro/feraypro-tracer](https://github.com/feraypro/feraypro-tracer)*
