@@ -3,7 +3,6 @@
 **Last updated:** 2026  
 **Version:** 1.7.3  
 **License:** MIT  
-**Live demo:** [ma.feraypro.com/methodologie](https://ma.feraypro.com/methodologie)
 
 ---
 
