@@ -17,7 +17,7 @@ Automatically calculates CO₂ avoided and child health impact for every recycle
 | Morocco | [ma.feraypro.com/impact](https://ma.feraypro.com/impact) | [METHODOLOGY.md](METHODOLOGY.md)
 | DR Congo | [cd.feraypro.com/impact](https://cd.feraypro.com/impact) | — |
 | France | [fr.feraypro.com/impact](https://fr.feraypro.com/impact) | — |
-| USA | [us.feraypro.com/impact](https://us.feraypro.com/impact) | — |
+| USA | [feraypro.com/impact](https://us.feraypro.com/impact) | — |
 
 ---
 
