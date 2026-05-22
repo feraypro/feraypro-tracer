@@ -2384,6 +2384,16 @@ function fpt_capture_ref() {
     $slugs = array_column( $partenaires, 'slug' );
     if ( ! in_array( $ref, $slugs, true ) ) return;
 
+    // Compter le clic uniquement si c'est une nouvelle session pour ce partenaire
+    // (évite de compter chaque page visitée — on compte l'arrivée depuis le lien ?ref=)
+    $cookie_actuel = isset( $_COOKIE['fpt_ref'] ) ? $_COOKIE['fpt_ref'] : '';
+    if ( $cookie_actuel !== $ref ) {
+        // Nouveau visiteur ou visiteur d'un autre partenaire — incrémenter
+        $key   = 'fpt_clicks_' . $ref;
+        $total = (int) get_option( $key, 0 );
+        update_option( $key, $total + 1, false ); // autoload=false
+    }
+
     // Sauvegarder dans un cookie 30 jours
     if ( ! headers_sent() ) {
         setcookie( 'fpt_ref', $ref, time() + ( 30 * DAY_IN_SECONDS ), COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true );
@@ -2466,9 +2476,9 @@ function fpt_get_stats_partenaire( $slug ) {
         'meta_query'     => [[ 'key' => '_fpt_ref', 'value' => sanitize_key($slug) ]],
     ]);
 
-    $total_lots  = count( $lots );
-    $total_poids = 0;
-    $total_co2   = 0;
+    $total_lots      = count( $lots );
+    $total_poids     = 0;
+    $total_co2       = 0;
     $total_collected = 0;
 
     foreach ( $lots as $id ) {
@@ -2477,12 +2487,17 @@ function fpt_get_stats_partenaire( $slug ) {
         if ( get_post_meta( $id, '_fpt_collected', true ) == '1' ) $total_collected++;
     }
 
+    $clicks     = (int) get_option( 'fpt_clicks_' . sanitize_key($slug), 0 );
+    $conversion = $clicks > 0 ? round( ( $total_lots / $clicks ) * 100, 1 ) : 0;
+
     return [
-        'lots'      => $total_lots,
-        'collected' => $total_collected,
-        'poids_kg'  => round( $total_poids, 1 ),
-        'co2_t'     => round( $total_co2, 4 ),
-        'ids'       => $lots,
+        'lots'       => $total_lots,
+        'collected'  => $total_collected,
+        'poids_kg'   => round( $total_poids, 1 ),
+        'co2_t'      => round( $total_co2, 4 ),
+        'clicks'     => $clicks,
+        'conversion' => $conversion, // % lots publiés / clics
+        'ids'        => $lots,
     ];
 }
 
@@ -2551,12 +2566,14 @@ function fpt_admin_page_partenaires() {
         <?php if ( ! empty($partenaires) ): ?>
         <!-- ── Tableau des stats ── -->
         <h2>📊 Stats par partenaire</h2>
-        <table class="widefat striped" style="max-width:900px;margin-bottom:30px">
+        <table class="widefat striped" style="max-width:980px;margin-bottom:30px">
             <thead>
                 <tr>
                     <th>Partenaire</th>
                     <th>Slug / Lien</th>
+                    <th style="text-align:center">Clics</th>
                     <th style="text-align:center">Lots publiés</th>
+                    <th style="text-align:center">Conversion</th>
                     <th style="text-align:center">Collectés</th>
                     <th style="text-align:right">Poids (kg)</th>
                     <th style="text-align:right">CO₂ évité (t)</th>
@@ -2571,6 +2588,10 @@ function fpt_admin_page_partenaires() {
                 $couleur = esc_attr( $p['couleur'] ?? '#1a7a4a' );
                 $actif   = ! empty( $p['actif'] );
                 $lien    = add_query_arg( 'ref', $p['slug'], home_url('/') );
+
+                // Couleur du taux de conversion
+                $conv    = $stats['conversion'];
+                $conv_color = $conv >= 10 ? '#1a7a4a' : ( $conv >= 3 ? '#e67e22' : '#c0392b' );
                 ?>
                 <tr>
                     <td>
@@ -2586,7 +2607,11 @@ function fpt_admin_page_partenaires() {
                         <code style="font-size:11px"><?php echo esc_html($p['slug']); ?></code><br>
                         <a href="<?php echo esc_url($lien); ?>" target="_blank" style="font-size:11px">🔗 <?php echo esc_html($lien); ?></a>
                     </td>
+                    <td style="text-align:center"><?php echo number_format($stats['clicks'], 0, ',', ' '); ?></td>
                     <td style="text-align:center"><strong><?php echo $stats['lots']; ?></strong></td>
+                    <td style="text-align:center;font-weight:700;color:<?php echo $conv_color; ?>">
+                        <?php echo $stats['clicks'] > 0 ? $conv . '%' : '—'; ?>
+                    </td>
                     <td style="text-align:center"><?php echo $stats['collected']; ?></td>
                     <td style="text-align:right"><?php echo number_format($stats['poids_kg'], 1, ',', ' '); ?> kg</td>
                     <td style="text-align:right;color:#1a7a4a"><strong><?php echo number_format($stats['co2_t'], 3, ',', ' '); ?> t</strong></td>
