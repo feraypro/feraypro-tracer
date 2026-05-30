@@ -3,7 +3,7 @@
  * Plugin Name: FerayPro Tracer
  * Plugin URI: https://ma.feraypro.com/impact
  * Description: Traçabilité des lots de déchets recyclés avec calcul CO₂ évité et génération de QR code. Module open source pour UNICEF Venture Fund.
- * Version: 1.7.3
+ * Version: 1.8.0
  * Author: FerayPro
  * License: MIT
  * Text Domain: feraypro-tracer
@@ -11,7 +11,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'FPT_VERSION',    '1.7.3' );
+define( 'FPT_VERSION',    '1.8.0' );
 define( 'FPT_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FPT_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
@@ -319,18 +319,48 @@ function fpt_calculate_process_co2( $titre, $poids_kg ) {
 
 function fpt_get_acheteurs() {
     $slug = get_option( 'fpt_acheteurs_cat_slug', 'acheteurs' );
-    return get_posts([
+    // Supporte plusieurs slugs séparés par virgule (ex: "acheteurs,buyers")
+    $slugs = array_map('trim', explode(',', $slug));
+
+    $posts = get_posts([
         'post_type'   => 'hp_listing',
         'post_status' => 'publish',
         'numberposts' => -1,
         'tax_query'   => [[
             'taxonomy' => 'hp_listing_category',
             'field'    => 'slug',
-            'terms'    => $slug,
+            'terms'    => $slugs,
         ]],
         'orderby' => 'title',
         'order'   => 'ASC',
     ]);
+
+    // Fallback : si vide, chercher par toutes les catégories contenant "achet" ou "buyer"
+    if ( empty($posts) ) {
+        $terms = get_terms(['taxonomy' => 'hp_listing_category', 'hide_empty' => true]);
+        $found_slugs = [];
+        foreach ($terms as $term) {
+            if ( stripos($term->slug, 'achet') !== false || stripos($term->slug, 'buyer') !== false ) {
+                $found_slugs[] = $term->slug;
+            }
+        }
+        if ($found_slugs) {
+            $posts = get_posts([
+                'post_type'   => 'hp_listing',
+                'post_status' => 'publish',
+                'numberposts' => -1,
+                'tax_query'   => [[
+                    'taxonomy' => 'hp_listing_category',
+                    'field'    => 'slug',
+                    'terms'    => $found_slugs,
+                ]],
+                'orderby' => 'title',
+                'order'   => 'ASC',
+            ]);
+        }
+    }
+
+    return $posts;
 }
 
 // ─── Hook : bouton "Confirmer collecte" dans wp-admin (meta box) ──────────────
@@ -360,6 +390,35 @@ function fpt_collection_metabox_html( $post ) {
         $acheteur_titre = get_the_title( $acheteur_id );
         $co2_mat        = (float) get_post_meta( $post->ID, '_fpt_co2_avoided', true );
         $co2_process    = fpt_calculate_process_co2( get_the_title($post->ID), $poids_kg );
+
+        // ── Commission ──
+        $prix_key    = 'hp_' . get_option('fpt_key_prix', 'prixvendeur');
+        $prix_raw    = get_post_meta( $post->ID, '_fpt_prix_lot', true )  // champ dédié (saisi dans la metabox)
+                    ?: get_post_meta( $post->ID, $prix_key, true );        // fallback champ HivePress
+        $prix        = (float) preg_replace('/[^\d.]/', '', str_replace(',', '.', $prix_raw));
+        $currency    = fpt_get_currency();
+        $comm_20     = $prix > 0 ? round($prix * 0.20, 2) : 0;
+        $vendeur_80  = $prix > 0 ? round($prix * 0.80, 2) : 0;
+        $fp_10       = $prix > 0 ? round($prix * 0.10, 2) : 0;
+
+        // Partenaire référent
+        $ref_slug    = get_post_meta($post->ID, '_fpt_ref', true);
+        $partenaire  = $ref_slug ? fpt_get_partenaire_by_slug($ref_slug) : null;
+
+        // Contact acheteur
+        $wa_key      = 'hp_' . get_option('fpt_key_whatsapp', 'whatsapp');
+        $wa_phone    = preg_replace('/[^0-9]/', '', get_post_meta($acheteur_id, $wa_key, true) ?: '');
+
+        // Numéro facture
+        $inv_stored  = get_post_meta($post->ID, '_fpt_invoice_number', true);
+        if ( ! $inv_stored ) {
+            $inv_stored = 'FP-INV-' . date('Ym') . '-' . $post->ID;
+            update_post_meta($post->ID, '_fpt_invoice_number', $inv_stored);
+        }
+
+        // Statut paiement
+        $paid        = get_post_meta($post->ID, '_fpt_commission_paid', true);
+        $paid_date   = get_post_meta($post->ID, '_fpt_commission_paid_date', true);
     ?>
         <div style="background:#e6f5ee;border:1px solid #1a7a4a;border-radius:6px;padding:10px;margin-bottom:10px">
             <strong style="color:#1a7a4a">✅ <?php echo fpt_t('Lot collecté','Batch collected'); ?></strong><br>
@@ -368,6 +427,99 @@ function fpt_collection_metabox_html( $post ) {
             <span style="color:#1a7a4a">🌱 CO₂ évité : <?php echo esc_html(number_format($co2_mat,4)); ?> t</span><br>
             <span style="color:#e67e22">🏭 CO₂ recyclage : <?php echo esc_html(number_format($co2_process,6)); ?> t</span>
         </div>
+
+        <!-- ── Bloc Facture Commission ── -->
+        <div style="margin-top:10px;border-top:1px solid #d0ddd4;padding-top:10px" id="fpt-facture-bloc-<?php echo $post->ID; ?>">
+            <strong style="font-size:12px;color:#333;display:block;margin-bottom:6px">📄 Facture commission (20%)</strong>
+            <?php
+            $inv_url = add_query_arg([
+                'action'  => 'fpt_facture',
+                'fpt_lot' => $post->ID,
+                'fpt_tok' => substr(md5($post->ID . AUTH_KEY), 0, 12),
+            ], admin_url('admin-ajax.php'));
+            ?>
+            <?php if ( $prix > 0 ) : ?>
+                <div style="background:#f4f6f4;border-radius:4px;padding:6px 8px;font-size:12px;margin-bottom:6px">
+                    💼 <strong><?php echo number_format($prix,2).' '.esc_html($currency); ?></strong>
+                    &nbsp;|&nbsp; ✅ FerayPro : <strong style="color:#1a7a4a"><?php echo number_format($comm_20,2).' '.esc_html($currency); ?></strong>
+                    &nbsp;|&nbsp; 🤝 Vendeur : <strong><?php echo number_format($vendeur_80,2).' '.esc_html($currency); ?></strong>
+                </div>
+                <a href="<?php echo esc_url($inv_url); ?>" target="_blank"
+                   style="display:block;background:#1a7a4a;color:#fff;text-decoration:none;padding:9px;border-radius:4px;font-size:13px;font-weight:700;text-align:center;margin-bottom:6px">
+                    📄 Ouvrir / Imprimer la facture PDF
+                </a>
+                <?php if ( $paid === 'paid' ) : ?>
+                    <div style="background:#e6f5ee;border:1px solid #1a7a4a;border-radius:4px;padding:7px 10px;font-size:12px;font-weight:700;color:#1a7a4a;text-align:center">
+                        ✅ Commission payée le <?php echo esc_html($paid_date); ?>
+                    </div>
+                <?php else : ?>
+                    <button type="button" onclick="fptMarquerPaye(<?php echo $post->ID; ?>)"
+                            style="background:#f59e0b;color:#fff;border:none;padding:7px;border-radius:4px;cursor:pointer;width:100%;font-size:12px;font-weight:700">
+                        💰 Marquer commission comme payée
+                    </button>
+                    <span id="fpt_paid_msg_<?php echo $post->ID; ?>" style="font-size:12px;display:block;margin-top:4px"></span>
+                <?php endif; ?>
+            <?php else : ?>
+                <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+                    <input type="number" id="fpt_prix_input_<?php echo $post->ID; ?>" step="0.01" min="0"
+                           placeholder="Prix total (ex: 1500)"
+                           style="flex:1;padding:6px;border:1px solid #1a7a4a;border-radius:4px;font-size:13px">
+                    <select id="fpt_currency_input_<?php echo $post->ID; ?>" style="padding:6px;border:1px solid #ccc;border-radius:4px;font-size:13px">
+                        <?php foreach(['MAD','EUR','USD','CDF','XOF'] as $cur) : ?>
+                        <option value="<?php echo $cur; ?>" <?php selected(fpt_get_currency(),$cur); ?>><?php echo $cur; ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <button type="button"
+                        onclick="fptSavePrix(<?php echo $post->ID; ?>)"
+                        style="background:#1a7a4a;color:#fff;border:none;padding:9px;border-radius:4px;cursor:pointer;width:100%;font-size:13px;font-weight:700">
+                    💾 Enregistrer le prix
+                </button>
+                <span id="fpt_prix_msg_<?php echo $post->ID; ?>" style="font-size:12px;display:block;margin-top:4px"></span>
+            <?php endif; ?>
+        </div>
+        <script>
+        function fptSavePrix(lotId) {
+            var prix = document.getElementById('fpt_prix_input_' + lotId).value;
+            var cur  = document.getElementById('fpt_currency_input_' + lotId).value;
+            var msg  = document.getElementById('fpt_prix_msg_' + lotId);
+            if (!prix || parseFloat(prix) <= 0) { msg.style.color='red'; msg.textContent='⚠️ Entrez un prix valide.'; return; }
+            msg.style.color='#555'; msg.textContent='⏳ Enregistrement...';
+            fetch(ajaxurl, {
+                method: 'POST',
+                headers: {'Content-Type':'application/x-www-form-urlencoded'},
+                body: 'action=fpt_save_prix&lot_id=' + lotId + '&prix=' + encodeURIComponent(prix) + '&currency=' + encodeURIComponent(cur) + '&nonce=<?php echo wp_create_nonce("fpt_save_prix"); ?>'
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    msg.style.color='green'; msg.textContent='✅ Prix enregistré !';
+                    setTimeout(() => location.reload(), 800);
+                } else {
+                    msg.style.color='red'; msg.textContent='❌ Erreur : ' + (data.data || 'inconnue');
+                }
+            });
+        }
+        function fptMarquerPaye(lotId) {
+            if (!confirm('Confirmer que la commission a été reçue ?')) return;
+            var msg = document.getElementById('fpt_paid_msg_' + lotId);
+            msg.style.color='#555'; msg.textContent='⏳ Enregistrement...';
+            fetch(ajaxurl, {
+                method: 'POST',
+                headers: {'Content-Type':'application/x-www-form-urlencoded'},
+                body: 'action=fpt_mark_paid_ajax&lot_id=' + lotId + '&nonce=<?php echo wp_create_nonce("fpt_mark_paid_ajax"); ?>'
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    msg.style.color='green'; msg.textContent='✅ Payé !';
+                    setTimeout(() => location.reload(), 600);
+                } else {
+                    msg.style.color='red'; msg.textContent='❌ Erreur.';
+                }
+            });
+        }
+        </script>
         <button type="button" onclick="document.getElementById('fpt_uncollect_form').style.display='block'" 
             style="background:#c0392b;color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px">
             <?php echo fpt_t('Annuler la collecte','Cancel collection'); ?>
@@ -398,6 +550,28 @@ function fpt_collection_metabox_html( $post ) {
     </div>
     <?php
 }
+
+// ─── Marquer commission payée via GET (lien dans la metabox) ─────────────────
+add_action( 'admin_init', 'fpt_handle_mark_paid_get' );
+function fpt_handle_mark_paid_get() {
+    if ( empty($_GET['fpt_do']) || $_GET['fpt_do'] !== 'paid' ) return;
+    if ( ! current_user_can('manage_options') ) return;
+    $lot_id = intval($_GET['fpt_lot'] ?? 0);
+    if ( ! $lot_id ) return;
+    if ( ! wp_verify_nonce($_GET['fpt_nonce'] ?? '', 'fpt_paid_' . $lot_id) ) return;
+
+    update_post_meta($lot_id, '_fpt_commission_paid', 'paid');
+    update_post_meta($lot_id, '_fpt_commission_paid_date', date_i18n('d/m/Y'));
+
+    wp_redirect( add_query_arg(['post' => $lot_id, 'action' => 'edit', 'fpt_ok' => '1'], admin_url('post.php')) );
+    exit;
+}
+
+add_action('admin_notices', function() {
+    if ( ! empty($_GET['fpt_ok']) ) {
+        echo '<div class="notice notice-success is-dismissible"><p>✅ Commission marquée comme payée.</p></div>';
+    }
+});
 
 // ─── Sauvegarder la confirmation de collecte ──────────────────────────────────
 add_action( 'save_post_hp_listing', 'fpt_save_collection', 30, 2 );
@@ -2213,6 +2387,12 @@ function fpt_admin_page() {
         update_option( 'fpt_key_buyersprice',  sanitize_text_field( $_POST['fpt_key_buyersprice'] ) );
         update_option( 'fpt_acheteurs_cat_slug', sanitize_key( $_POST['fpt_acheteurs_cat_slug'] ) );
         update_option( 'fpt_prix_category_slug', sanitize_key( $_POST['fpt_prix_category_slug'] ) );
+        // Facture & Commission
+        if (isset($_POST['fpt_currency']))           update_option('fpt_currency',            sanitize_text_field($_POST['fpt_currency']));
+        if (isset($_POST['fpt_tva_rate']))            update_option('fpt_tva_rate',             sanitize_text_field($_POST['fpt_tva_rate']));
+        if (isset($_POST['fpt_rib_iban']))            update_option('fpt_rib_iban',             sanitize_text_field($_POST['fpt_rib_iban']));
+        if (isset($_POST['fpt_rib_whatsapp']))        update_option('fpt_rib_whatsapp',         sanitize_text_field($_POST['fpt_rib_whatsapp']));
+        if (isset($_POST['fpt_adresse_facturation'])) update_option('fpt_adresse_facturation',  sanitize_text_field($_POST['fpt_adresse_facturation']));
         echo '<div class="notice notice-success"><p>Paramètres sauvegardés / Settings saved.</p></div>';
     }
     $total_co2    = (float) get_option( 'fpt_total_co2', 0 );
@@ -2318,6 +2498,97 @@ function fpt_admin_page() {
                     </td>
                 </tr>
             </table>
+
+            <tr><td colspan="2"><hr><strong>📄 Facture & Commission</strong></td></tr>
+            <table class="form-table">
+                <tr>
+                    <th><label for="fpt_currency">Devise</label></th>
+                    <td>
+                        <select id="fpt_currency" name="fpt_currency">
+                            <?php
+                            $currencies = [
+                                'MAD' => 'MAD — Dirham marocain (Maroc)',
+                                'EUR' => 'EUR — Euro (France, UE)',
+                                'USD' => 'USD — Dollar américain (USA)',
+                                'CDF' => 'CDF — Franc congolais (RDC)',
+                                'XOF' => 'XOF — Franc CFA (Afrique de l\'Ouest)',
+                                'XAF' => 'XAF — Franc CFA (Afrique Centrale)',
+                                'GBP' => 'GBP — Livre sterling (UK)',
+                                'CAD' => 'CAD — Dollar canadien',
+                                'AUD' => 'AUD — Dollar australien',
+                                'CHF' => 'CHF — Franc suisse',
+                                'NGN' => 'NGN — Naira (Nigéria)',
+                                'GHS' => 'GHS — Cedi (Ghana)',
+                                'KES' => 'KES — Shilling kényan',
+                                'TZS' => 'TZS — Shilling tanzanien',
+                                'UGX' => 'UGX — Shilling ougandais',
+                                'ETB' => 'ETB — Birr éthiopien',
+                                'ZAR' => 'ZAR — Rand sud-africain',
+                                'EGP' => 'EGP — Livre égyptienne',
+                                'TND' => 'TND — Dinar tunisien',
+                                'DZD' => 'DZD — Dinar algérien',
+                                'MRU' => 'MRU — Ouguiya (Mauritanie)',
+                                'SLL' => 'SLL — Leone (Sierra Leone)',
+                                'GMD' => 'GMD — Dalasi (Gambie)',
+                                'GNF' => 'GNF — Franc guinéen',
+                                'BIF' => 'BIF — Franc burundais',
+                                'RWF' => 'RWF — Franc rwandais',
+                                'MZN' => 'MZN — Metical (Mozambique)',
+                                'AOA' => 'AOA — Kwanza (Angola)',
+                                'BRL' => 'BRL — Real (Brésil)',
+                                'MXN' => 'MXN — Peso mexicain',
+                                'COP' => 'COP — Peso colombien',
+                                'ARS' => 'ARS — Peso argentin',
+                                'INR' => 'INR — Roupie indienne',
+                                'PKR' => 'PKR — Roupie pakistanaise',
+                                'BDT' => 'BDT — Taka (Bangladesh)',
+                                'IDR' => 'IDR — Roupie indonésienne',
+                                'PHP' => 'PHP — Peso philippin',
+                                'VND' => 'VND — Dong (Vietnam)',
+                                'THB' => 'THB — Baht (Thaïlande)',
+                                'CNY' => 'CNY — Yuan (Chine)',
+                                'JPY' => 'JPY — Yen (Japon)',
+                                'KRW' => 'KRW — Won (Corée du Sud)',
+                                'SAR' => 'SAR — Riyal saoudien',
+                                'AED' => 'AED — Dirham UAE',
+                                'QAR' => 'QAR — Riyal qatari',
+                                'TRY' => 'TRY — Livre turque',
+                                'UAH' => 'UAH — Hryvnia (Ukraine)',
+                                'SEK' => 'SEK — Couronne suédoise',
+                                'NOK' => 'NOK — Couronne norvégienne',
+                                'DKK' => 'DKK — Couronne danoise',
+                                'PLN' => 'PLN — Zloty (Pologne)',
+                            ];
+                            $current = fpt_get_currency();
+                            foreach ($currencies as $v => $l):
+                            ?>
+                            <option value="<?php echo $v; ?>" <?php selected($current, $v); ?>><?php echo $l; ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <p class="description">Choisissez la devise de ce site. Sauvegardez pour l'appliquer à toutes les factures.</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="fpt_tva_rate">TVA (%)</label></th>
+                    <td>
+                        <input type="number" id="fpt_tva_rate" name="fpt_tva_rate" value="<?php echo esc_attr(get_option('fpt_tva_rate','0')); ?>" min="0" max="100" step="0.1" style="width:80px"> %
+                        <p class="description">0 = Exonéré · France : 20 · RDC : 16 · Maroc : 20</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="fpt_rib_iban">IBAN / RIB</label></th>
+                    <td><input type="text" id="fpt_rib_iban" name="fpt_rib_iban" value="<?php echo esc_attr(get_option('fpt_rib_iban','')); ?>" class="regular-text" placeholder="MA64 0000 ..."></td>
+                </tr>
+                <tr>
+                    <th><label for="fpt_rib_whatsapp">WhatsApp / Mobile Money</label></th>
+                    <td><input type="text" id="fpt_rib_whatsapp" name="fpt_rib_whatsapp" value="<?php echo esc_attr(get_option('fpt_rib_whatsapp','')); ?>" class="regular-text" placeholder="+212 6XX XXX XXX"></td>
+                </tr>
+                <tr>
+                    <th><label for="fpt_adresse_facturation">Adresse facturation</label></th>
+                    <td><input type="text" id="fpt_adresse_facturation" name="fpt_adresse_facturation" value="<?php echo esc_attr(get_option('fpt_adresse_facturation','')); ?>" class="regular-text" placeholder="Casablanca, Maroc"></td>
+                </tr>
+            </table>
+
             <button type="submit" name="fpt_save_settings" class="button button-primary">Sauvegarder</button>
         </form>
 
@@ -2807,3 +3078,423 @@ function fpt_shortcode_partenaires( $atts ) {
     echo '</div>';
     return ob_get_clean();
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MODULE COMMISSION — Facturation 20% FerayPro + 10% Partenaire
+// ══════════════════════════════════════════════════════════════════════════════
+// Logique financière :
+//   Prix total lot  = 100%
+//   Acheteur paie vendeur  = 80% (directement)
+//   Acheteur envoie FerayPro = 20% (via cette facture)
+//   FerayPro redistribue :
+//     → Partenaire marketing = 10% du prix total
+//     → FerayPro net         = 10% du prix total
+
+// ─── Helper : récupérer le prix du lot en nombre ─────────────────────────────
+function fpt_get_prix_lot( $post_id ) {
+    // D'abord notre champ dédié (saisi dans la metabox)
+    $val = get_post_meta( $post_id, '_fpt_prix_lot', true );
+    if ( $val ) return (float) $val;
+    // Sinon le champ HivePress configuré
+    $key = 'hp_' . get_option('fpt_key_prix', 'prixvendeur');
+    $val = get_post_meta( $post_id, $key, true );
+    $val = preg_replace('/[^\d.]/', '', str_replace(',', '.', $val));
+    return (float) $val;
+}
+
+// ─── Helper : numéro de facture unique ───────────────────────────────────────
+function fpt_invoice_number( $post_id ) {
+    $stored = get_post_meta( $post_id, '_fpt_invoice_number', true );
+    if ( $stored ) return $stored;
+    // Générer : FP-INV-YYYYMM-{post_id}
+    $num = 'FP-INV-' . date('Ym') . '-' . $post_id;
+    update_post_meta( $post_id, '_fpt_invoice_number', $num );
+    return $num;
+}
+
+// ─── Helper : données acheteur (email, téléphone) ────────────────────────────
+function fpt_get_acheteur_contact( $acheteur_id ) {
+    if ( ! $acheteur_id ) return [];
+    return [
+        'nom'       => get_the_title( $acheteur_id ),
+        'ville'     => get_post_meta( $acheteur_id, fpt_key_ville(), true ),
+        'telephone' => get_post_meta( $acheteur_id, fpt_key_whatsapp(), true ),
+        'email'     => get_post_meta( $acheteur_id, '_fpt_acheteur_email', true )
+                       ?: get_post_meta( $acheteur_id, 'hp_email', true )
+                       ?: '',
+    ];
+}
+
+// ─── Helper : infos partenaire du lot ────────────────────────────────────────
+function fpt_get_lot_partenaire( $post_id ) {
+    $ref = get_post_meta( $post_id, '_fpt_ref', true );
+    if ( ! $ref ) return null;
+    return fpt_get_partenaire_by_slug( $ref );
+}
+
+// (ancienne metabox commission supprimée — logique intégrée dans fpt_collection_metabox_html)
+
+
+// ─── Marquer comme payé — via admin-post.php (form séparé dans la metabox) ───
+add_action( 'admin_post_fpt_mark_paid', 'fpt_handle_mark_paid' );
+function fpt_handle_mark_paid() {
+    if ( ! current_user_can('manage_options') ) wp_die('Accès refusé', 403);
+    if ( ! isset($_POST['fpt_mark_paid_nonce']) || ! wp_verify_nonce($_POST['fpt_mark_paid_nonce'], 'fpt_mark_paid_nonce') ) {
+        wp_die('Nonce invalide', 403);
+    }
+    $post_id = intval( $_POST['fpt_post_id'] ?? 0 );
+    if ( ! $post_id ) wp_die('Post ID manquant', 400);
+
+    update_post_meta( $post_id, '_fpt_commission_paid', 'paid' );
+    update_post_meta( $post_id, '_fpt_commission_paid_date', date_i18n('d/m/Y') );
+
+    // Rediriger vers la page d'édition du lot avec message de succès
+    wp_redirect( add_query_arg(
+        [ 'post' => $post_id, 'action' => 'edit', 'fpt_paid' => '1' ],
+        admin_url('post.php')
+    ));
+    exit;
+}
+
+// ─── Notice admin après marquage payé ────────────────────────────────────────
+add_action( 'admin_notices', 'fpt_paid_admin_notice' );
+function fpt_paid_admin_notice() {
+    if ( ! empty($_GET['fpt_paid']) && $_GET['fpt_paid'] === '1' ) {
+        echo '<div class="notice notice-success is-dismissible"><p>✅ <strong>Commission marquée comme payée.</strong></p></div>';
+    }
+}
+
+// ─── Token sécurisé pour accès public à la facture ───────────────────────────
+function fpt_invoice_token( $post_id ) {
+    return substr( md5( $post_id . AUTH_KEY . 'fpt_invoice' ), 0, 16 );
+}
+
+// ─── (réglages facture intégrés dans fpt_admin_page — voir fpt_save_settings) ─
+
+// ─── Devise intelligente : option du site ou détection par domaine ───────────
+function fpt_get_currency() {
+    $saved = get_option('fpt_currency', '');
+    if ($saved) return $saved;
+    // Détection automatique par domaine
+    $host = $_SERVER['HTTP_HOST'] ?? '';
+    if (strpos($host, '.fr') !== false || strpos($host, 'france') !== false) return 'EUR';
+    if (strpos($host, '.us') !== false || strpos($host, 'feraypro.com') !== false) return 'USD';
+    if (strpos($host, '.cd') !== false || strpos($host, 'congo') !== false) return 'USD';
+    return 'MAD'; // défaut Maroc
+}
+
+
+add_action( 'wp_ajax_fpt_mark_paid_ajax', 'fpt_ajax_mark_paid' );
+function fpt_ajax_mark_paid() {
+    if ( ! current_user_can('manage_options') ) wp_send_json_error('Accès refusé');
+    if ( ! wp_verify_nonce($_POST['nonce'] ?? '', 'fpt_mark_paid_ajax') ) wp_send_json_error('Nonce invalide');
+    $lot_id = intval($_POST['lot_id'] ?? 0);
+    if ( ! $lot_id ) wp_send_json_error('ID manquant');
+    update_post_meta($lot_id, '_fpt_commission_paid', 'paid');
+    update_post_meta($lot_id, '_fpt_commission_paid_date', date_i18n('d/m/Y'));
+    wp_send_json_success();
+}
+
+// ─── AJAX : sauvegarder le prix du lot ───────────────────────────────────────
+add_action( 'wp_ajax_fpt_save_prix', 'fpt_ajax_save_prix' );
+function fpt_ajax_save_prix() {
+    if ( ! current_user_can('manage_options') ) wp_send_json_error('Accès refusé');
+    if ( ! wp_verify_nonce($_POST['nonce'] ?? '', 'fpt_save_prix') ) wp_send_json_error('Nonce invalide');
+    $lot_id = intval($_POST['lot_id'] ?? 0);
+    $prix   = floatval($_POST['prix'] ?? 0);
+    if ( ! $lot_id || $prix <= 0 ) wp_send_json_error('Données invalides');
+    update_post_meta($lot_id, '_fpt_prix_lot', $prix);
+    if ( ! empty($_POST['currency']) ) update_option('fpt_currency', sanitize_text_field($_POST['currency']));
+    wp_send_json_success(['prix' => $prix]);
+}
+
+// ─── Facture PDF — via admin-ajax (bypasse les permaliens) ───────────────────
+add_action( 'wp_ajax_fpt_facture',        'fpt_afficher_facture' );
+add_action( 'wp_ajax_nopriv_fpt_facture', 'fpt_afficher_facture' );
+function fpt_afficher_facture() {
+    $lot_id = intval($_GET['fpt_lot'] ?? $_GET['fpt_facture'] ?? 0);
+    $token  = sanitize_text_field($_GET['fpt_tok'] ?? '');
+    if ( ! $lot_id || $token !== substr(md5($lot_id . AUTH_KEY), 0, 12) ) {
+        wp_die('Lien invalide.', 403);
+    }
+
+    $lot = get_post($lot_id);
+    if (!$lot) wp_die('Lot introuvable.', 404);
+
+    // Données lot
+    $titre       = get_the_title($lot_id);
+    $poids_kg    = fpt_get_poids_kg($lot_id);
+    $prix        = fpt_get_prix_lot($lot_id);
+    $acheteur_id = get_post_meta($lot_id, '_fpt_acheteur_id', true);
+    $acheteur    = $acheteur_id ? get_the_title($acheteur_id) : '—';
+    $date_col    = get_post_meta($lot_id, '_fpt_collected_date', true);
+    $ref_slug    = get_post_meta($lot_id, '_fpt_ref', true);
+    $partenaire  = $ref_slug ? fpt_get_partenaire_by_slug($ref_slug) : null;
+    $site        = get_option('fpt_site_name', get_bloginfo('name'));
+    $site_url    = home_url();
+
+    // Devise selon le pays configuré
+    $currency = fpt_get_currency();
+
+    // Logo du site (custom logo WordPress)
+    $logo_html = '';
+    $logo_id   = get_theme_mod('custom_logo');
+    if ($logo_id) {
+        $logo_src = wp_get_attachment_image_url($logo_id, 'medium');
+        if ($logo_src) $logo_html = '<img src="' . esc_url($logo_src) . '" style="max-height:60px;max-width:200px;object-fit:contain">';
+    }
+    if (!$logo_html) {
+        // Fallback : favicon du site
+        $icon_url = get_site_icon_url(64);
+        if ($icon_url) $logo_html = '<img src="' . esc_url($icon_url) . '" style="height:40px;width:40px;object-fit:contain;margin-right:8px;vertical-align:middle">';
+        $logo_html .= '<span style="font-size:20px;font-weight:700;color:#1a7a4a;vertical-align:middle">' . esc_html($site) . '</span>';
+    }
+
+    // Numéro facture
+    $inv = get_post_meta($lot_id, '_fpt_invoice_number', true);
+    if (!$inv) {
+        $inv = 'FP-' . date('Ym') . '-' . $lot_id;
+        update_post_meta($lot_id, '_fpt_invoice_number', $inv);
+    }
+
+    // TVA
+    $tva_rate    = floatval(get_option('fpt_tva_rate', 0)); // 0 = exonéré par défaut
+    $comm20      = round($prix * 0.20, 2);
+    $tva_montant = $tva_rate > 0 ? round($comm20 * $tva_rate / 100, 2) : 0;
+    $comm20_ttc  = $comm20 + $tva_montant;
+    $vend80      = round($prix * 0.80, 2);
+    $fp10        = round($prix * 0.10, 2);
+
+    // Coordonnées paiement
+    $rib_iban = get_option('fpt_rib_iban', '');
+    $rib_wa   = get_option('fpt_rib_whatsapp', '');
+
+    header('Content-Type: text/html; charset=UTF-8');
+    ?><!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Facture <?php echo esc_html($inv); ?> — <?php echo esc_html($site); ?></title>
+<style>
+/* ── Reset & page pleine ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; }
+body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #111; background: #e8e8e8; }
+
+/* ── Bouton impression (masqué à l'impression) ── */
+.no-print { background: #1a7a4a; padding: 12px; text-align: center; }
+.no-print button {
+    background: #fff; color: #1a7a4a; border: none;
+    padding: 10px 32px; border-radius: 5px; font-size: 14px;
+    font-weight: 700; cursor: pointer; letter-spacing: .02em;
+}
+.no-print button:hover { background: #f0fdf4; }
+
+/* ── Page facture ── */
+.page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 16px auto;
+    background: #fff;
+    padding: 16mm 18mm;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 4px 24px rgba(0,0,0,.15);
+}
+
+/* ── En-tête ── */
+.inv-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 14px;
+    border-bottom: 3px solid #1a7a4a;
+    margin-bottom: 20px;
+}
+.inv-meta { text-align: right; font-size: 12px; color: #444; line-height: 1.7; }
+.inv-meta strong { display: block; font-size: 17px; color: #111; margin-bottom: 2px; }
+.inv-meta .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 4px;
+    font-size: 11px; font-weight: 700; margin-top: 4px;
+}
+.badge-paid    { background: #e6f5ee; color: #1a7a4a; border: 1px solid #1a7a4a; }
+.badge-pending { background: #fff8e1; color: #92400e; border: 1px solid #f59e0b; }
+
+/* ── Parties ── */
+.parties { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+.party label { font-size: 9px; text-transform: uppercase; letter-spacing: .1em; color: #888; display: block; margin-bottom: 5px; }
+.party strong { font-size: 14px; display: block; margin-bottom: 3px; }
+.party span { font-size: 11px; color: #666; line-height: 1.5; display: block; }
+
+/* ── Tableau lot ── */
+.inv-table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
+.inv-table th {
+    background: #f4f4f4; font-size: 10px; text-transform: uppercase;
+    letter-spacing: .06em; color: #666; padding: 7px 10px;
+    text-align: left; border-bottom: 2px solid #ddd;
+}
+.inv-table td { padding: 10px; border-bottom: 1px solid #eee; font-size: 13px; vertical-align: top; }
+.inv-table .right { text-align: right; font-weight: 700; }
+
+/* ── Totaux ── */
+.totals { margin-bottom: 18px; }
+.total-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 7px 10px; font-size: 13px; border-bottom: 1px solid #eee;
+}
+.total-row:nth-child(odd)  { background: #fafafa; }
+.total-row:nth-child(even) { background: #fff; }
+.total-row.main {
+    background: #e6f5ee; font-size: 15px; font-weight: 700;
+    border-top: 2px solid #1a7a4a; border-bottom: 2px solid #1a7a4a;
+    padding: 10px;
+}
+.total-row.main .val { color: #1a7a4a; font-size: 17px; }
+.total-row.tva { background: #fff8e1; font-size: 12px; color: #92400e; }
+
+/* ── Note règlement ── */
+.note {
+    background: #f0fdf4; border-left: 4px solid #1a7a4a;
+    padding: 10px 14px; font-size: 12px; color: #1a7a4a;
+    margin-bottom: 18px; line-height: 1.7;
+}
+
+/* ── Partenaire ── */
+.partner-box {
+    background: #fff8e1; border: 1px solid #f0c040;
+    border-radius: 5px; padding: 10px 14px; font-size: 12px; margin-bottom: 18px;
+}
+
+/* ── Footer ── */
+.inv-footer {
+    margin-top: auto;
+    padding-top: 14px;
+    border-top: 1px solid #ddd;
+    font-size: 10px; color: #999; text-align: center; line-height: 1.6;
+}
+
+/* ── Impression pleine page ── */
+@media print {
+    html, body { background: #fff; }
+    .no-print  { display: none !important; }
+    .page {
+        width: 100%;
+        min-height: 100vh;
+        margin: 0;
+        padding: 12mm 16mm;
+        box-shadow: none;
+    }
+    @page { size: A4; margin: 0; }
+}
+</style>
+</head>
+<body>
+
+<div class="no-print">
+    <button onclick="window.print()">🖨️ Imprimer / Enregistrer en PDF</button>
+</div>
+
+<div class="page">
+
+    <!-- En-tête -->
+    <div class="inv-header">
+        <div><?php echo $logo_html; ?></div>
+        <div class="inv-meta">
+            <strong>FACTURE N° <?php echo esc_html($inv); ?></strong>
+            Date : <?php echo date_i18n('d/m/Y'); ?><br>
+            <?php if ($date_col) echo 'Collecte : ' . date_i18n('d/m/Y', strtotime($date_col)); ?>
+        </div>
+    </div>
+
+    <!-- Parties -->
+    <div class="parties">
+        <div class="party">
+            <label>Émetteur</label>
+            <strong><?php echo esc_html($site); ?></strong>
+            <span><?php echo esc_html($site_url); ?></span>
+            <?php $adresse = get_option('fpt_adresse_facturation','');
+            if ($adresse) echo '<span>' . nl2br(esc_html($adresse)) . '</span>'; ?>
+        </div>
+        <div class="party">
+            <label>Destinataire — Acheteur</label>
+            <strong><?php echo esc_html($acheteur); ?></strong>
+        </div>
+    </div>
+
+    <!-- Détail lot -->
+    <table class="inv-table">
+        <thead>
+            <tr>
+                <th>Description</th>
+                <th>Poids</th>
+                <th style="text-align:right">Prix total lot</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><?php echo esc_html($titre); ?></td>
+                <td><?php echo esc_html(fpt_display_weight($poids_kg)); ?></td>
+                <td class="right"><?php echo number_format($prix, 2, '.', ' ') . ' ' . esc_html($currency); ?></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- Totaux -->
+    <div class="totals">
+        <div class="total-row">
+            <span>🤝 Vendeur reçoit directement (80%)</span>
+            <span><?php echo number_format($vend80, 2, '.', ' ') . ' ' . esc_html($currency); ?></span>
+        </div>
+        <div class="total-row">
+            <span>Commission <?php echo esc_html($site); ?> HT (20%)</span>
+            <span><?php echo number_format($comm20, 2, '.', ' ') . ' ' . esc_html($currency); ?></span>
+        </div>
+        <?php if ($tva_rate > 0) : ?>
+        <div class="total-row tva">
+            <span>TVA (<?php echo $tva_rate; ?>%)</span>
+            <span><?php echo number_format($tva_montant, 2, '.', ' ') . ' ' . esc_html($currency); ?></span>
+        </div>
+        <?php else : ?>
+        <div class="total-row tva">
+            <span>TVA</span>
+            <span>Exonéré</span>
+        </div>
+        <?php endif; ?>
+        <div class="total-row main">
+            <span>💰 TOTAL DÛ À <?php echo esc_html(strtoupper($site)); ?> TTC</span>
+            <span class="val"><?php echo number_format($comm20_ttc, 2, '.', ' ') . ' ' . esc_html($currency); ?></span>
+        </div>
+    </div>
+
+    <?php if ($partenaire) : ?>
+    <div class="partner-box">
+        🤝 <strong>Partenaire référent : <?php echo esc_html($partenaire['nom']); ?></strong> —
+        Commission à reverser par <?php echo esc_html($site); ?> :
+        <strong><?php echo number_format($fp10, 2, '.', ' ') . ' ' . esc_html($currency); ?></strong> (10%)
+    </div>
+    <?php endif; ?>
+
+    <!-- Mode de règlement -->
+    <div class="note">
+        <strong>Mode de règlement :</strong><br>
+        • L'acheteur règle <strong><?php echo number_format($vend80, 2, '.', ' ') . ' ' . esc_html($currency); ?></strong> directement au vendeur.<br>
+        • L'acheteur transfère <strong><?php echo number_format($comm20_ttc, 2, '.', ' ') . ' ' . esc_html($currency); ?> TTC</strong> à <?php echo esc_html($site); ?>.<br>
+        <?php if ($rib_iban) echo '🏦 IBAN : <strong>' . esc_html($rib_iban) . '</strong><br>'; ?>
+        <?php if ($rib_wa)   echo '📱 Paiement mobile : <strong>' . esc_html($rib_wa) . '</strong>'; ?>
+    </div>
+
+    <!-- Footer -->
+    <div class="inv-footer">
+        <?php echo esc_html($site); ?> · <?php echo esc_html($site_url); ?> ·
+        Facture N° <?php echo esc_html($inv); ?> · <?php echo date_i18n('d/m/Y'); ?><br>
+        Document généré par FerayPro Tracer — Traçabilité des déchets recyclés
+    </div>
+
+</div>
+</body>
+</html>
+<?php
+    exit;
+}
+// ─── (fin du module commission) ───────────────────────────────────────────────
+
