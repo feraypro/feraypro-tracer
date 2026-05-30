@@ -2116,7 +2116,7 @@ function fpt_shortcode_dashboard( $atts ) {
 // ─── CSS frontend ──────────────────────────────────────────────────────────────
 add_action( 'wp_enqueue_scripts', 'fpt_enqueue_styles' );
 function fpt_enqueue_styles() {
-    wp_enqueue_style( 'feraypro-tracer', FPT_PLUGIN_URL . 'assets/tracer.css', [], FPT_VERSION );
+    wp_enqueue_style( 'feraypro-tracer', FPT_PLUGIN_URL . 'tracer.css', [], FPT_VERSION );
 }
 
 // ─── Shortcode : Page Méthodologie ────────────────────────────────────────────
