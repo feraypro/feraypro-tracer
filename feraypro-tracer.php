@@ -2113,8 +2113,9 @@ function fpt_shortcode_dashboard( $atts ) {
     return ob_get_clean();
 }
 
-// ─── CSS frontend ──────────────────────────────────────────────────────────────
-add_action( 'wp_enqueue_scripts', 'fpt_enqueue_styles' );
+// ─── CSS frontend + admin ──────────────────────────────────────────────────────
+add_action( 'wp_enqueue_scripts',    'fpt_enqueue_styles' );
+add_action( 'admin_enqueue_scripts', 'fpt_enqueue_styles' );
 function fpt_enqueue_styles() {
     wp_enqueue_style( 'feraypro-tracer', FPT_PLUGIN_URL . 'tracer.css', [], FPT_VERSION );
 }
