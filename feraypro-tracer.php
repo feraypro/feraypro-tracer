@@ -520,8 +520,131 @@ function fpt_collection_metabox_html( $post ) {
             });
         }
         </script>
+        <!-- ── Bloc Preuve de pesée ── -->
+        <?php
+        $preuves = get_post_meta($post->ID, '_fpt_preuves_pesee', true);
+        $preuves = is_array($preuves) ? $preuves : [];
+        ?>
+        <div style="margin-top:10px;border-top:1px solid #d0ddd4;padding-top:10px">
+            <strong style="font-size:12px;color:#333;display:block;margin-bottom:6px">
+                ⚖️ <?php echo fpt_t('Preuves de pesée','Weighing proofs'); ?>
+                <span style="font-weight:400;color:#888;font-size:11px"> — <?php echo fpt_t('photo, bon de bascule, PDF','photo, weigh slip, PDF'); ?></span>
+            </strong>
+
+            <?php if ( ! empty($preuves) ) : ?>
+            <div id="fpt-preuves-list-<?php echo $post->ID; ?>" style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px">
+                <?php foreach ($preuves as $att_id) :
+                    $att_url  = wp_get_attachment_url($att_id);
+                    $att_mime = get_post_mime_type($att_id);
+                    $att_name = basename(get_attached_file($att_id));
+                    if ( ! $att_url ) continue;
+                    $icon = strpos($att_mime, 'pdf') !== false ? '📄' : '🖼️';
+                    $thumb = strpos($att_mime, 'image') !== false
+                        ? wp_get_attachment_image($att_id, [40,40], false, ['style'=>'width:40px;height:40px;object-fit:cover;border-radius:4px;flex-shrink:0'])
+                        : '<span style="font-size:28px;flex-shrink:0">'.$icon.'</span>';
+                ?>
+                <div style="display:flex;align-items:center;gap:8px;background:#f4f6f4;border:1px solid #d0ddd4;border-radius:5px;padding:5px 8px">
+                    <?php echo $thumb; ?>
+                    <div style="flex:1;min-width:0">
+                        <a href="<?php echo esc_url($att_url); ?>" target="_blank"
+                           style="font-size:12px;color:#1a7a4a;text-decoration:none;font-weight:600;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                            <?php echo esc_html($att_name); ?>
+                        </a>
+                        <span style="font-size:10px;color:#888"><?php echo esc_html(strtoupper(str_replace('image/','',$att_mime))); ?></span>
+                    </div>
+                    <button type="button"
+                        onclick="fptSupprimerPreuve(<?php echo $post->ID; ?>, <?php echo $att_id; ?>, this)"
+                        style="background:none;border:none;cursor:pointer;color:#c0392b;font-size:14px;padding:2px 4px"
+                        title="<?php echo fpt_t('Supprimer','Delete'); ?>">✕</button>
+                </div>
+                <?php endforeach; ?>
+            </div>
+            <?php else : ?>
+            <div id="fpt-preuves-list-<?php echo $post->ID; ?>" style="margin-bottom:8px"></div>
+            <?php endif; ?>
+
+            <!-- Zone d'upload -->
+            <div id="fpt-upload-zone-<?php echo $post->ID; ?>"
+                 style="border:2px dashed #b0c9bb;border-radius:6px;padding:12px;text-align:center;cursor:pointer;transition:border-color .2s;background:#fafcfb"
+                 onclick="document.getElementById('fpt-file-input-<?php echo $post->ID; ?>').click()"
+                 ondragover="event.preventDefault();this.style.borderColor='#1a7a4a'"
+                 ondragleave="this.style.borderColor='#b0c9bb'"
+                 ondrop="fptHandleDrop(event,<?php echo $post->ID; ?>)">
+                <span style="font-size:20px">📎</span>
+                <p style="margin:4px 0 0;font-size:12px;color:#6b8070">
+                    <?php echo fpt_t('Cliquer ou glisser un fichier','Click or drag a file'); ?><br>
+                    <span style="font-size:10px;color:#aaa">JPG · PNG · PDF · max 8 Mo</span>
+                </p>
+            </div>
+            <input type="file" id="fpt-file-input-<?php echo $post->ID; ?>"
+                   accept="image/jpeg,image/png,image/webp,application/pdf"
+                   style="display:none"
+                   onchange="fptUploadPreuve(<?php echo $post->ID; ?>, this)">
+            <div id="fpt-upload-msg-<?php echo $post->ID; ?>" style="font-size:12px;margin-top:5px;min-height:16px"></div>
+        </div>
+        <script>
+        function fptUploadPreuve(lotId, input) {
+            var file = input.files[0];
+            if (!file) return;
+            if (file.size > 8 * 1024 * 1024) {
+                document.getElementById('fpt-upload-msg-' + lotId).innerHTML = '<span style="color:red">⚠️ <?php echo fpt_t('Fichier trop lourd (max 8 Mo)','File too large (max 8MB)'); ?></span>';
+                return;
+            }
+            var msg = document.getElementById('fpt-upload-msg-' + lotId);
+            msg.innerHTML = '<span style="color:#555">⏳ <?php echo fpt_t('Envoi en cours...','Uploading...'); ?></span>';
+            var fd = new FormData();
+            fd.append('action',  'fpt_upload_preuve');
+            fd.append('lot_id',  lotId);
+            fd.append('nonce',   '<?php echo wp_create_nonce("fpt_upload_preuve"); ?>');
+            fd.append('file',    file);
+            fetch(ajaxurl, { method:'POST', body:fd })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    msg.innerHTML = '<span style="color:green">✅ <?php echo fpt_t('Fichier ajouté','File added'); ?></span>';
+                    var list = document.getElementById('fpt-preuves-list-' + lotId);
+                    list.insertAdjacentHTML('beforeend', data.data.html);
+                    input.value = '';
+                    setTimeout(() => { msg.innerHTML = ''; }, 2000);
+                } else {
+                    msg.innerHTML = '<span style="color:red">❌ ' + (data.data || '<?php echo fpt_t('Erreur upload','Upload error'); ?>') + '</span>';
+                }
+            })
+            .catch(() => {
+                msg.innerHTML = '<span style="color:red">❌ <?php echo fpt_t('Erreur réseau','Network error'); ?></span>';
+            });
+        }
+        function fptHandleDrop(event, lotId) {
+            event.preventDefault();
+            document.getElementById('fpt-upload-zone-' + lotId).style.borderColor = '#b0c9bb';
+            var input = document.getElementById('fpt-file-input-' + lotId);
+            var dt = new DataTransfer();
+            dt.items.add(event.dataTransfer.files[0]);
+            input.files = dt.files;
+            fptUploadPreuve(lotId, input);
+        }
+        function fptSupprimerPreuve(lotId, attId, btn) {
+            if (!confirm('<?php echo fpt_t('Supprimer cette preuve ?','Delete this proof?'); ?>')) return;
+            btn.disabled = true;
+            fetch(ajaxurl, {
+                method: 'POST',
+                headers: {'Content-Type':'application/x-www-form-urlencoded'},
+                body: 'action=fpt_delete_preuve&lot_id=' + lotId + '&att_id=' + attId + '&nonce=<?php echo wp_create_nonce("fpt_delete_preuve"); ?>'
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    btn.closest('div[style]').remove();
+                } else {
+                    btn.disabled = false;
+                    alert('<?php echo fpt_t('Erreur suppression','Delete error'); ?>');
+                }
+            });
+        }
+        </script>
+
         <button type="button" onclick="document.getElementById('fpt_uncollect_form').style.display='block'" 
-            style="background:#c0392b;color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px">
+            style="background:#c0392b;color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px;margin-top:10px">
             <?php echo fpt_t('Annuler la collecte','Cancel collection'); ?>
         </button>
         <div id="fpt_uncollect_form" style="display:none;margin-top:8px">
@@ -615,6 +738,92 @@ function fpt_save_collection( $post_id, $post ) {
         delete_post_meta($post_id, '_fpt_co2_transport');
         delete_post_meta($post_id, '_fpt_co2_total');
     }
+}
+
+// ─── AJAX : Upload preuve de pesée ───────────────────────────────────────────
+add_action( 'wp_ajax_fpt_upload_preuve', 'fpt_ajax_upload_preuve' );
+function fpt_ajax_upload_preuve() {
+    check_ajax_referer( 'fpt_upload_preuve', 'nonce' );
+    if ( ! current_user_can('manage_options') ) wp_send_json_error('unauthorized');
+
+    $lot_id = intval($_POST['lot_id'] ?? 0);
+    if ( ! $lot_id ) wp_send_json_error('invalid_lot');
+
+    if ( empty($_FILES['file']['name']) ) wp_send_json_error('no_file');
+
+    // Vérification type MIME
+    $allowed_types = ['image/jpeg','image/png','image/webp','application/pdf'];
+    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+    $mime  = finfo_file($finfo, $_FILES['file']['tmp_name']);
+    finfo_close($finfo);
+    if ( ! in_array($mime, $allowed_types, true) ) wp_send_json_error(fpt_t('Type de fichier non autorisé','File type not allowed'));
+
+    // Vérification taille (8 Mo)
+    if ( $_FILES['file']['size'] > 8 * 1024 * 1024 ) wp_send_json_error(fpt_t('Fichier trop lourd','File too large'));
+
+    // Charger les fonctions d'upload WP
+    require_once ABSPATH . 'wp-admin/includes/file.php';
+    require_once ABSPATH . 'wp-admin/includes/image.php';
+    require_once ABSPATH . 'wp-admin/includes/media.php';
+
+    // Attacher le fichier au post (lot)
+    $att_id = media_handle_upload('file', $lot_id);
+
+    if ( is_wp_error($att_id) ) {
+        wp_send_json_error($att_id->get_error_message());
+    }
+
+    // Enregistrer l'ID dans les metas du lot
+    $preuves   = get_post_meta($lot_id, '_fpt_preuves_pesee', true);
+    $preuves   = is_array($preuves) ? $preuves : [];
+    $preuves[] = $att_id;
+    update_post_meta($lot_id, '_fpt_preuves_pesee', $preuves);
+
+    // Construire le HTML de la ligne pour insertion JS
+    $att_url  = wp_get_attachment_url($att_id);
+    $att_mime = get_post_mime_type($att_id);
+    $att_name = basename(get_attached_file($att_id));
+    $icon     = strpos($att_mime, 'pdf') !== false ? '📄' : '🖼️';
+    $thumb    = strpos($att_mime, 'image') !== false
+        ? wp_get_attachment_image($att_id, [40,40], false, ['style'=>'width:40px;height:40px;object-fit:cover;border-radius:4px;flex-shrink:0'])
+        : '<span style="font-size:28px;flex-shrink:0">'.$icon.'</span>';
+
+    $lang_delete = fpt_t('Supprimer','Delete');
+    $mime_label  = strtoupper(str_replace('image/', '', $att_mime));
+
+    $html = '<div style="display:flex;align-items:center;gap:8px;background:#f4f6f4;border:1px solid #d0ddd4;border-radius:5px;padding:5px 8px">'
+        . $thumb
+        . '<div style="flex:1;min-width:0">'
+        . '<a href="' . esc_url($att_url) . '" target="_blank" style="font-size:12px;color:#1a7a4a;text-decoration:none;font-weight:600;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+        . esc_html($att_name)
+        . '</a><span style="font-size:10px;color:#888">' . esc_html($mime_label) . '</span>'
+        . '</div>'
+        . '<button type="button" onclick="fptSupprimerPreuve(' . $lot_id . ',' . $att_id . ',this)" '
+        . 'style="background:none;border:none;cursor:pointer;color:#c0392b;font-size:14px;padding:2px 4px" title="' . esc_attr($lang_delete) . '">✕</button>'
+        . '</div>';
+
+    wp_send_json_success(['html' => $html, 'att_id' => $att_id]);
+}
+
+// ─── AJAX : Supprimer une preuve de pesée ────────────────────────────────────
+add_action( 'wp_ajax_fpt_delete_preuve', 'fpt_ajax_delete_preuve' );
+function fpt_ajax_delete_preuve() {
+    check_ajax_referer( 'fpt_delete_preuve', 'nonce' );
+    if ( ! current_user_can('manage_options') ) wp_send_json_error('unauthorized');
+
+    $lot_id = intval($_POST['lot_id'] ?? 0);
+    $att_id = intval($_POST['att_id'] ?? 0);
+    if ( ! $lot_id || ! $att_id ) wp_send_json_error('invalid');
+
+    $preuves = get_post_meta($lot_id, '_fpt_preuves_pesee', true);
+    $preuves = is_array($preuves) ? $preuves : [];
+    $preuves = array_values(array_filter($preuves, function($id) use ($att_id) { return (int)$id !== $att_id; }));
+    update_post_meta($lot_id, '_fpt_preuves_pesee', $preuves);
+
+    // Supprimer l'attachment WP (fichier + miniatures)
+    wp_delete_attachment($att_id, true);
+
+    wp_send_json_success();
 }
 
 // ─── Shortcode : Dashboard acheteur ──────────────────────────────────────────
