@@ -14,7 +14,7 @@ All CO₂ factors use the **net gain method**:
 CO₂ net gain (t/t) = Primary production emissions − Recycling process emissions
 ```
 
-Source: FEDEREC/ADEME ACV 2017. This is the scientifically rigorous approach validated by independent auditors. Earlier documentation versions cited gross avoidance figures — the code has always applied net gain values. This document is now fully aligned with the code.
+Source: FEDEREC/ADEME ACV 2017. This is the scientifically rigorous approach validated by independent auditors. 
 
 ---
 
