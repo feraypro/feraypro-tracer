@@ -51,11 +51,217 @@ function fpt_display_weight( $poids_kg ) {
 }
 
 // ─── Helper : langue du site ───────────────────────────────────────────────────
+// fpt_language         = override manuel (rarement utilisé, admin reste FR)
+// fpt_invoice_language = langue de la FACTURE envoyée au client (en/es/pt/fr)
+//
+// fpt_lang() : détecte automatiquement la langue du FRONT par domaine.
+// Ordre de priorité : option WP → détection domaine → 'fr' par défaut.
+// Admin WordPress : toujours français (is_admin() court-circuite tout).
 function fpt_lang() {
-    return get_option( 'fpt_language', 'fr' ); // 'fr' ou 'en'
+    // L'admin reste toujours en français
+    if ( is_admin() ) return 'fr';
+
+    // Override manuel dans les settings (optionnel — laisser vide = auto)
+    $opt = get_option('fpt_language', '');
+    if ( $opt && $opt !== 'auto' ) return $opt;
+
+    // Détection automatique par domaine
+    $host = strtolower( $_SERVER['HTTP_HOST'] ?? '' );
+    if ( strpos($host, '.us')          !== false ) return 'en';
+    if ( strpos($host, 'feraypro.com') !== false && strpos($host, '.') === strpos($host, strtolower('feraypro.com')) ) return 'en'; // feraypro.com (USA, sans sous-domaine pays)
+    if ( strpos($host, 'feraypro.com') !== false && ! preg_match('/\.(fr|ma|cd|sn)\./', $host) ) return 'en';
+    if ( strpos($host, 'es.feraypro')  !== false ) return 'es';
+    if ( strpos($host, 'pt.feraypro')  !== false ) return 'pt';
+    if ( strpos($host, 'br.feraypro')  !== false ) return 'pt';
+    if ( strpos($host, '.fr')          !== false ) return 'fr';
+    if ( strpos($host, 'ma.feraypro')  !== false ) return 'fr';
+    if ( strpos($host, '.cd')          !== false ) return 'fr';
+    if ( strpos($host, '.sn')          !== false ) return 'fr';
+
+    return 'fr'; // défaut
 }
 
+function fpt_invoice_lang() {
+    return get_option( 'fpt_invoice_language', 'fr' ); // 'fr' | 'en' | 'es' | 'pt'
+}
+
+// Tableau centralisé de toutes les chaînes de l'interface.
+// Clé = identifiant interne · chaque langue est une colonne.
+function fpt_strings() {
+    return [
+        // ── Statuts lots ───────────────────────────────────────────────
+        'collected'           => ['fr'=>'Collecté',                'en'=>'Collected',              'es'=>'Recogido',               'pt'=>'Recolhido'],
+        'available'           => ['fr'=>'À collecter',             'en'=>'Available',               'es'=>'Disponible',             'pt'=>'Disponível'],
+        'batch_collected'     => ['fr'=>'Lot collecté',            'en'=>'Batch collected',         'es'=>'Lote recogido',          'pt'=>'Lote recolhido'],
+        'awaiting_collection' => ['fr'=>'En attente de collecte',  'en'=>'Awaiting collection',     'es'=>'A la espera de recogida','pt'=>'Aguardando coleta'],
+        // ── Metabox collecte ───────────────────────────────────────────
+        'confirm_collection'  => ['fr'=>'Confirmer la collecte',   'en'=>'Confirm Collection',      'es'=>'Confirmar recogida',     'pt'=>'Confirmar coleta'],
+        'cancel_collection'   => ['fr'=>'Annuler la collecte',     'en'=>'Cancel collection',       'es'=>'Cancelar recogida',      'pt'=>'Cancelar coleta'],
+        'confirm_cancel'      => ['fr'=>'Confirmer annulation',    'en'=>'Confirm cancellation',    'es'=>'Confirmar cancelación',  'pt'=>'Confirmar cancelamento'],
+        'select_buyer'        => ['fr'=>'Sélectionner l\'acheteur qui a collecté ce lot :', 'en'=>'Select the buyer who collected this batch:', 'es'=>'Seleccionar el comprador que recogió este lote:', 'pt'=>'Selecionar o comprador que coletou este lote:'],
+        'choose_buyer'        => ['fr'=>'— Choisir un acheteur —', 'en'=>'— Select a buyer —',      'es'=>'— Seleccionar comprador —','pt'=>'— Selecionar comprador —'],
+        'weight_missing'      => ['fr'=>'⚠️ Poids non renseigné — impossible de confirmer.', 'en'=>'⚠️ Weight missing — cannot confirm.', 'es'=>'⚠️ Peso no indicado — no se puede confirmar.', 'pt'=>'⚠️ Peso não informado — impossível confirmar.'],
+        // ── Preuve de pesée ────────────────────────────────────────────
+        'weighing_proofs'     => ['fr'=>'Preuves de pesée',        'en'=>'Weighing proofs',         'es'=>'Pruebas de pesaje',      'pt'=>'Comprovantes de pesagem'],
+        'proof_subtitle'      => ['fr'=>'photo, bon de bascule, PDF','en'=>'photo, weigh slip, PDF','es'=>'foto, albarán de pesaje, PDF','pt'=>'foto, nota de pesagem, PDF'],
+        'delete'              => ['fr'=>'Supprimer',               'en'=>'Delete',                  'es'=>'Eliminar',               'pt'=>'Excluir'],
+        'click_or_drag'       => ['fr'=>'Cliquer ou glisser un fichier','en'=>'Click or drag a file','es'=>'Haga clic o arrastre un archivo','pt'=>'Clique ou arraste um arquivo'],
+        'file_too_large'      => ['fr'=>'Fichier trop lourd (max 8 Mo)','en'=>'File too large (max 8MB)','es'=>'Archivo demasiado grande (máx 8 MB)','pt'=>'Arquivo muito grande (máx 8 MB)'],
+        'uploading'           => ['fr'=>'Envoi en cours...',       'en'=>'Uploading...',            'es'=>'Subiendo...',            'pt'=>'Enviando...'],
+        'file_added'          => ['fr'=>'Fichier ajouté',          'en'=>'File added',              'es'=>'Archivo añadido',        'pt'=>'Arquivo adicionado'],
+        'upload_error'        => ['fr'=>'Erreur upload',           'en'=>'Upload error',            'es'=>'Error al subir',         'pt'=>'Erro de upload'],
+        'network_error'       => ['fr'=>'Erreur réseau',           'en'=>'Network error',           'es'=>'Error de red',           'pt'=>'Erro de rede'],
+        'delete_proof'        => ['fr'=>'Supprimer cette preuve ?','en'=>'Delete this proof?',      'es'=>'¿Eliminar esta prueba?', 'pt'=>'Excluir este comprovante?'],
+        'delete_error'        => ['fr'=>'Erreur suppression',      'en'=>'Delete error',            'es'=>'Error al eliminar',      'pt'=>'Erro ao excluir'],
+        'file_type_error'     => ['fr'=>'Type de fichier non autorisé','en'=>'File type not allowed','es'=>'Tipo de archivo no permitido','pt'=>'Tipo de arquivo não permitido'],
+        'file_too_large_s'    => ['fr'=>'Fichier trop lourd',      'en'=>'File too large',          'es'=>'Archivo demasiado grande','pt'=>'Arquivo muito grande'],
+        // ── Dashboard & lots ───────────────────────────────────────────
+        'buyer'               => ['fr'=>'Acheteur',                'en'=>'Buyer',                   'es'=>'Comprador',              'pt'=>'Comprador'],
+        'date'                => ['fr'=>'Date',                    'en'=>'Date',                    'es'=>'Fecha',                  'pt'=>'Data'],
+        'batches_traced'      => ['fr'=>'Lots tracés',             'en'=>'Batches traced',          'es'=>'Lotes trazados',         'pt'=>'Lotes rastreados'],
+        'waste_to_recycle'    => ['fr'=>'Déchets à recycler',      'en'=>'Waste to recycle',        'es'=>'Residuos a reciclar',    'pt'=>'Resíduos a reciclar'],
+        'co2_avoided'         => ['fr'=>'CO₂ évité (recyclage)',   'en'=>'CO₂ avoided (recycling)', 'es'=>'CO₂ evitado (reciclaje)','pt'=>'CO₂ evitado (reciclagem)'],
+        'co2_produced'        => ['fr'=>'CO₂ produit (recyclage)', 'en'=>'CO₂ produced (recycling)','es'=>'CO₂ producido (reciclaje)','pt'=>'CO₂ produzido (reciclagem)'],
+        'net_co2'             => ['fr'=>'Bilan net CO₂',           'en'=>'Net CO₂ balance',         'es'=>'Balance neto de CO₂',    'pt'=>'Balanço líquido de CO₂'],
+        'avoided_minus'       => ['fr'=>'évité − produit',         'en'=>'avoided − produced',      'es'=>'evitado − producido',    'pt'=>'evitado − produzido'],
+        'co2_avoided_short'   => ['fr'=>'évité',                   'en'=>'avoided',                 'es'=>'evitado',                'pt'=>'evitado'],
+        'recycling'           => ['fr'=>'recyclage',               'en'=>'recycling',               'es'=>'reciclaje',              'pt'=>'reciclagem'],
+        'weight_to_collect'   => ['fr'=>'Poids à collecter',       'en'=>'Weight to collect',       'es'=>'Peso a recoger',         'pt'=>'Peso a coletar'],
+        'city'                => ['fr'=>'Ville',                   'en'=>'City',                    'es'=>'Ciudad',                 'pt'=>'Cidade'],
+        'traced_on'           => ['fr'=>'Tracé le',                'en'=>'Traced on',               'es'=>'Trazado el',             'pt'=>'Rastreado em'],
+        'scan_batch'          => ['fr'=>'Scanner ce lot',          'en'=>'Scan this batch',         'es'=>'Escanear este lote',     'pt'=>'Escanear este lote'],
+        'calculation'         => ['fr'=>'Calcul',                  'en'=>'Calculation',             'es'=>'Cálculo',                'pt'=>'Cálculo'],
+        'global_impact'       => ['fr'=>'Voir l\'impact global FerayPro','en'=>'View FerayPro global impact','es'=>'Ver impacto global FerayPro','pt'=>'Ver impacto global FerayPro'],
+        'source_ademe'        => ['fr'=>'Source : ADEME Base Carbone · Open Source MIT','en'=>'Source: ADEME Base Carbone · Open Source MIT','es'=>'Fuente: ADEME Base Carbone · Open Source MIT','pt'=>'Fonte: ADEME Base Carbone · Open Source MIT'],
+        'recent_batches'      => ['fr'=>'Derniers lots tracés',    'en'=>'Recently traced batches', 'es'=>'Últimos lotes trazados', 'pt'=>'Últimos lotes rastreados'],
+        'kg_collected'        => ['fr'=>'kg collectés',            'en'=>'collected',               'es'=>'recogidos',              'pt'=>'coletados'],
+        'unrecognized'        => ['fr'=>'non reconnu',             'en'=>'unrecognized',            'es'=>'no reconocido',          'pt'=>'não reconhecido'],
+        'env_impact'          => ['fr'=>'Impact environnemental de ce lot','en'=>'Environmental impact of this batch','es'=>'Impacto ambiental de este lote','pt'=>'Impacto ambiental deste lote'],
+        'env_impact_title'    => ['fr'=>'Impact Environnemental',  'en'=>'Environmental Impact',    'es'=>'Impacto Ambiental',      'pt'=>'Impacto Ambiental'],
+        'recommended_by'      => ['fr'=>'Recommandé par',          'en'=>'Recommended by',          'es'=>'Recomendado por',        'pt'=>'Recomendado por'],
+        'emission_factors'    => ['fr'=>'Facteurs d\'émission',    'en'=>'Emission factors',        'es'=>'Factores de emisión',    'pt'=>'Fatores de emissão'],
+        // ── Acheteur dashboard ─────────────────────────────────────────
+        'batches_collected'   => ['fr'=>'Lots collectés',          'en'=>'Batches collected',       'es'=>'Lotes recogidos',        'pt'=>'Lotes coletados'],
+        'total_weight'        => ['fr'=>'Poids total',             'en'=>'Total weight',            'es'=>'Peso total',             'pt'=>'Peso total'],
+        'co2_produced_recycl' => ['fr'=>'CO₂ produit (recyclage)', 'en'=>'CO₂ produced (recycling)','es'=>'CO₂ producido (reciclaje)','pt'=>'CO₂ produzido (reciclagem)'],
+        'no_batches_yet'      => ['fr'=>'Aucun lot collecté pour l\'instant.','en'=>'No batches collected yet.','es'=>'Ningún lote recogido todavía.','pt'=>'Nenhum lote coletado ainda.'],
+        'zones'               => ['fr'=>'Zones : ',                'en'=>'Zones: ',                 'es'=>'Zonas: ',                'pt'=>'Zonas: '],
+        'vehicles'            => ['fr'=>'Véhicules : ',            'en'=>'Vehicles: ',              'es'=>'Vehículos: ',            'pt'=>'Veículos: '],
+        'lots_collected_tab'  => ['fr'=>'Lots collectés',          'en'=>'Collected batches',       'es'=>'Lotes recogidos',        'pt'=>'Lotes coletados'],
+        'recycling_short'     => ['fr'=>'recyclage',               'en'=>'recycling',               'es'=>'reciclaje',              'pt'=>'reciclagem'],
+        // ── Dashboard header ───────────────────────────────────────────
+        'dashboard_subtitle'  => ['fr'=>'Traçabilité en temps réel des déchets recyclés','en'=>'Real-time traceability of recycled waste','es'=>'Trazabilidad en tiempo real de residuos reciclados','pt'=>'Rastreabilidade em tempo real de resíduos reciclados'],
+        'in_country_fr'       => ['fr'=>' au ',                    'en'=>' in ',                    'es'=>' en ',                   'pt'=>' em '],
+        // ── Prix du jour ───────────────────────────────────────────────
+        'prices_today'        => ['fr'=>'Prix du jour — ',         'en'=>'Today\'s Prices — ',      'es'=>'Precios de hoy — ',      'pt'=>'Preços de hoje — '],
+        'updated_on'          => ['fr'=>'Mis à jour le',           'en'=>'Updated',                 'es'=>'Actualizado',            'pt'=>'Atualizado'],
+        'all_prices'          => ['fr'=>'Voir tous les prix du marché →','en'=>'View all market prices →','es'=>'Ver todos los precios →','pt'=>'Ver todos os preços →'],
+        'updated_by'          => ['fr'=>'Mis à jour par FerayPro', 'en'=>'Updated by FerayPro',     'es'=>'Actualizado por FerayPro','pt'=>'Atualizado por FerayPro'],
+        // ── WhatsApp ───────────────────────────────────────────────────
+        'contact_whatsapp'    => ['fr'=>'Contacter via WhatsApp',  'en'=>'Contact via WhatsApp',    'es'=>'Contactar vía WhatsApp', 'pt'=>'Contatar via WhatsApp'],
+        // ── Partenaires ────────────────────────────────────────────────
+        'lots_recommended'    => ['fr'=>'lots recommandés',        'en'=>'recommended batches',     'es'=>'lotes recomendados',     'pt'=>'lotes recomendados'],
+        // ── Santé enfants ──────────────────────────────────────────────
+        'pollution_indicators'=> ['fr'=>'Indicateurs de Réduction d\'Exposition aux Polluants','en'=>'Pollutant Exposure Risk Reduction Indicators','es'=>'Indicadores de Reducción de Exposición a Contaminantes','pt'=>'Indicadores de Redução de Exposição a Poluentes'],
+        'lead_diverted'       => ['fr'=>'Plomb détourné (estimé)', 'en'=>'Lead diverted (est.)',    'es'=>'Plomo desviado (est.)',   'pt'=>'Chumbo desviado (est.)'],
+        'lead_info'           => ['fr'=>'Réduction estimée du risque d\'exposition (OMS — aucun seuil sans effet)','en'=>'Estimated exposure risk reduction (WHO — no safe threshold)','es'=>'Reducción estimada del riesgo de exposición (OMS — sin umbral seguro)','pt'=>'Redução estimada do risco de exposição (OMS — sem limite seguro)'],
+        'pm25_diverted'       => ['fr'=>'PM2.5 détournées (estimé)','en'=>'PM2.5 diverted (est.)', 'es'=>'PM2.5 desviadas (est.)',  'pt'=>'PM2.5 desviadas (est.)'],
+        'pm25_info'           => ['fr'=>'Proxy de réduction d\'exposition respiratoire (brûlage câbles évité)','en'=>'Respiratory exposure risk proxy (avoided cable burning)','es'=>'Indicador de reducción de exposición respiratoria (quema de cables evitada)','pt'=>'Indicador de redução de exposição respiratória (queima de cabos evitada)'],
+        'cadmium_diverted'    => ['fr'=>'Cadmium détourné (estimé)','en'=>'Cadmium diverted (est.)','es'=>'Cadmio desviado (est.)', 'pt'=>'Cádmio desviado (est.)'],
+        'cadmium_info'        => ['fr'=>'Proxy de réduction du risque rénal (e-waste, piles)','en'=>'Renal risk reduction proxy (e-waste, batteries)','es'=>'Indicador de reducción del riesgo renal (e-waste, pilas)','pt'=>'Indicador de redução do risco renal (e-waste, pilhas)'],
+        'mercury_diverted'    => ['fr'=>'Mercure détourné (estimé)','en'=>'Mercury diverted (est.)','es'=>'Mercurio desviado (est.)','pt'=>'Mercúrio desviado (est.)'],
+        'mercury_info'        => ['fr'=>'Proxy de réduction du risque neurologique (écrans, lampes)','en'=>'Neurological risk reduction proxy (screens, lamps)','es'=>'Indicador de reducción del riesgo neurológico (pantallas, lámparas)','pt'=>'Indicador de redução do risco neurológico (telas, lâmpadas)'],
+        'erri_label'          => ['fr'=>'Indice de réduction du risque d\'exposition','en'=>'Exposure Risk Reduction Index','es'=>'Índice de reducción del riesgo de exposición','pt'=>'Índice de redução do risco de exposição'],
+        // ── Méthodologie ───────────────────────────────────────────────
+        'methodology'         => ['fr'=>'Méthodologie de Calcul',  'en'=>'Calculation Methodology', 'es'=>'Metodología de cálculo', 'pt'=>'Metodologia de cálculo'],
+        'input_data'          => ['fr'=>'📥 Données d\'entrée',    'en'=>'📥 Input Data',           'es'=>'📥 Datos de entrada',    'pt'=>'📥 Dados de entrada'],
+        'field'               => ['fr'=>'Champ',                   'en'=>'Field',                   'es'=>'Campo',                  'pt'=>'Campo'],
+        'role'                => ['fr'=>'Rôle',                    'en'=>'Role',                    'es'=>'Función',                'pt'=>'Função'],
+        'listing_title_role'  => ['fr'=>'Identifie le type de déchet → sélectionne le facteur CO₂ et santé','en'=>'Identifies waste type → selects CO₂ and health factor','es'=>'Identifica el tipo de residuo → selecciona el factor CO₂ y salud','pt'=>'Identifica o tipo de resíduo → seleciona o fator CO₂ e saúde'],
+        'weight_primary'      => ['fr'=>'Variable principale de tous les calculs','en'=>'Primary variable for all calculations','es'=>'Variable principal de todos los cálculos','pt'=>'Variável principal de todos os cálculos'],
+        'city_geo'            => ['fr'=>'Géolocalisation de l\'impact','en'=>'Geolocation of impact','es'=>'Geolocalización del impacto','pt'=>'Geolocalização do impacto'],
+        'co2_section'         => ['fr'=>'Section 1 — Impact CO₂',  'en'=>'Section 1 — CO₂ Impact',  'es'=>'Sección 1 — Impacto CO₂','pt'=>'Seção 1 — Impacto de CO₂'],
+        'principle'           => ['fr'=>'Principe',                'en'=>'Principle',               'es'=>'Principio',              'pt'=>'Princípio'],
+        'formula'             => ['fr'=>'Formule',                 'en'=>'Formula',                 'es'=>'Fórmula',                'pt'=>'Fórmula'],
+        'example'             => ['fr'=>'Exemple',                 'en'=>'Example',                 'es'=>'Ejemplo',                'pt'=>'Exemplo'],
+        'waste_detection'     => ['fr'=>'Détection du type de déchet','en'=>'Waste type detection', 'es'=>'Detección del tipo de residuo','pt'=>'Detecção do tipo de resíduo'],
+        'material'            => ['fr'=>'Matière',                 'en'=>'Material',                'es'=>'Material',               'pt'=>'Material'],
+        'co2_factor_header'   => ['fr'=>'t CO₂ évité / tonne recyclée','en'=>'t CO₂ avoided / tonne recycled','es'=>'t CO₂ evitado / tonelada reciclada','pt'=>'t CO₂ evitado / tonelada reciclada'],
+        'justification'       => ['fr'=>'Justification',           'en'=>'Justification',           'es'=>'Justificación',          'pt'=>'Justificativa'],
+        'equivalents'         => ['fr'=>'Équivalents affichés',    'en'=>'Displayed equivalents',   'es'=>'Equivalentes mostrados', 'pt'=>'Equivalentes exibidos'],
+        'trees_year'          => ['fr'=>'Arbres/an',               'en'=>'Trees/year',              'es'=>'Árboles/año',            'pt'=>'Árvores/ano'],
+        'car_km'              => ['fr'=>'km voiture évités',       'en'=>'Car km avoided',          'es'=>'km de coche evitados',   'pt'=>'km de carro evitados'],
+        'official_sources'    => ['fr'=>'Sources officielles',     'en'=>'Official Sources',        'es'=>'Fuentes oficiales',      'pt'=>'Fontes oficiais'],
+        'limitations'         => ['fr'=>'Limites & Statut de Validation','en'=>'Limitations & Validation Status','es'=>'Limitaciones y estado de validación','pt'=>'Limitações e status de validação'],
+        'live_dashboard'      => ['fr'=>'Voir le dashboard live',  'en'=>'View live dashboard',     'es'=>'Ver el panel en vivo',   'pt'=>'Ver painel ao vivo'],
+        'weight_label'        => ['fr'=>'Poids',                   'en'=>'Weight',                  'es'=>'Peso',                   'pt'=>'Peso'],
+        'note_lb'             => ['fr'=>'Note : lb convertis automatiquement en kg (× 0,453592)','en'=>'Note: lb automatically converted to kg (× 0.453592)','es'=>'Nota: lb convertidos automáticamente a kg (× 0,453592)','pt'=>'Nota: lb convertidos automaticamente para kg (× 0,453592)'],
+        'note_lb_full'        => ['fr'=>'Note : les livres (lb) sont automatiquement converties en kg (× 0,453592) avant le calcul.','en'=>'Note: pounds (lb) are automatically converted to kg (× 0.453592) before calculation.','es'=>'Nota: las libras (lb) se convierten automáticamente a kg (× 0,453592) antes del cálculo.','pt'=>'Nota: libras (lb) são convertidas automaticamente para kg (× 0,453592) antes do cálculo.'],
+        'co2_factor_main'     => ['fr'=>'Principaux facteurs CO₂ (source : ADEME Base Carbone)','en'=>'Main CO₂ factors (source: ADEME Base Carbone)','es'=>'Principales factores CO₂ (fuente: ADEME Base Carbone)','pt'=>'Principais fatores CO₂ (fonte: ADEME Base Carbone)'],
+        // ── Facture / Invoice ─────────────────────────────────────────
+        'inv_emitter'         => ['fr'=>'Émetteur',                'en'=>'Issuer',                  'es'=>'Emisor',                 'pt'=>'Emissor'],
+        'inv_recipient'       => ['fr'=>'Destinataire — Acheteur', 'en'=>'Recipient — Buyer',       'es'=>'Destinatario — Comprador','pt'=>'Destinatário — Comprador'],
+        'inv_description'     => ['fr'=>'Description',             'en'=>'Description',             'es'=>'Descripción',            'pt'=>'Descrição'],
+        'inv_weight'          => ['fr'=>'Poids',                   'en'=>'Weight',                  'es'=>'Peso',                   'pt'=>'Peso'],
+        'inv_total_price'     => ['fr'=>'Prix total lot',          'en'=>'Total batch price',       'es'=>'Precio total del lote',  'pt'=>'Preço total do lote'],
+        'inv_vendor_share'    => ['fr'=>'🤝 Vendeur reçoit directement (80%)','en'=>'🤝 Vendor receives directly (80%)','es'=>'🤝 Vendedor recibe directamente (80%)','pt'=>'🤝 Vendedor recebe diretamente (80%)'],
+        'inv_commission'      => ['fr'=>'Commission',              'en'=>'Commission',              'es'=>'Comisión',               'pt'=>'Comissão'],
+        'inv_commission_ht'   => ['fr'=>'HT',                      'en'=>'excl. tax',               'es'=>'sin IVA',                'pt'=>'s/ IVA'],
+        'inv_tva_exempt'      => ['fr'=>'Exonéré',                 'en'=>'Exempt',                  'es'=>'Exento',                 'pt'=>'Isento'],
+        'inv_total_due'       => ['fr'=>'TOTAL DÛ À',              'en'=>'TOTAL DUE TO',            'es'=>'TOTAL A PAGAR A',        'pt'=>'TOTAL DEVIDO A'],
+        'inv_ttc'             => ['fr'=>'TTC',                     'en'=>'incl. tax',               'es'=>'IVA incluido',           'pt'=>'c/ IVA'],
+        'inv_payment_title'   => ['fr'=>'Mode de règlement :',     'en'=>'Payment instructions:',   'es'=>'Instrucciones de pago:', 'pt'=>'Instruções de pagamento:'],
+        'inv_vendor_pays'     => ['fr'=>'L\'acheteur règle',       'en'=>'The buyer pays',          'es'=>'El comprador paga',      'pt'=>'O comprador paga'],
+        'inv_directly'        => ['fr'=>'directement au vendeur.', 'en'=>'directly to the vendor.', 'es'=>'directamente al vendedor.','pt'=>'diretamente ao vendedor.'],
+        'inv_buyer_transfers' => ['fr'=>'L\'acheteur transfère',   'en'=>'The buyer transfers',     'es'=>'El comprador transfiere', 'pt'=>'O comprador transfere'],
+        'inv_to_site'         => ['fr'=>'à',                       'en'=>'to',                      'es'=>'a',                      'pt'=>'a'],
+        'inv_partner_ref'     => ['fr'=>'Partenaire référent :',   'en'=>'Referring partner:',      'es'=>'Socio referente:',       'pt'=>'Parceiro referente:'],
+        'inv_partner_comm'    => ['fr'=>'Commission à reverser par','en'=>'Commission to be paid by','es'=>'Comisión a abonar por',  'pt'=>'Comissão a pagar por'],
+        'inv_date'            => ['fr'=>'Date :',                  'en'=>'Date:',                   'es'=>'Fecha:',                 'pt'=>'Data:'],
+        'inv_collect_date'    => ['fr'=>'Collecte :',              'en'=>'Collection:',             'es'=>'Recogida:',              'pt'=>'Coleta:'],
+        'inv_print'           => ['fr'=>'🖨️ Imprimer / Enregistrer en PDF','en'=>'🖨️ Print / Save as PDF','es'=>'🖨️ Imprimir / Guardar como PDF','pt'=>'🖨️ Imprimir / Salvar como PDF'],
+        'inv_footer_doc'      => ['fr'=>'Document généré par FerayPro Tracer — Traçabilité des déchets recyclés','en'=>'Document generated by FerayPro Tracer — Recycled waste traceability','es'=>'Documento generado por FerayPro Tracer — Trazabilidad de residuos reciclados','pt'=>'Documento gerado pelo FerayPro Tracer — Rastreabilidade de resíduos reciclados'],
+        'inv_commission_paid' => ['fr'=>'Commission payée le',     'en'=>'Commission paid on',      'es'=>'Comisión pagada el',     'pt'=>'Comissão paga em'],
+        'mark_paid'           => ['fr'=>'💰 Marquer commission comme payée','en'=>'💰 Mark commission as paid','es'=>'💰 Marcar comisión como pagada','pt'=>'💰 Marcar comissão como paga'],
+        'saving'              => ['fr'=>'⏳ Enregistrement...',    'en'=>'⏳ Saving...',            'es'=>'⏳ Guardando...',         'pt'=>'⏳ Salvando...'],
+        'saved_ok'            => ['fr'=>'✅ Prix enregistré !',    'en'=>'✅ Price saved!',         'es'=>'✅ Precio guardado.',     'pt'=>'✅ Preço salvo!'],
+        'invalid_price'       => ['fr'=>'⚠️ Entrez un prix valide.','en'=>'⚠️ Enter a valid price.','es'=>'⚠️ Ingrese un precio válido.','pt'=>'⚠️ Insira um preço válido.'],
+        'confirm_paid'        => ['fr'=>'Confirmer que la commission a été reçue ?','en'=>'Confirm that the commission has been received?','es'=>'¿Confirmar que la comisión fue recibida?','pt'=>'Confirmar que a comissão foi recebida?'],
+    ];
+}
+
+// Fonction principale de traduction — remplace l'ancien fpt_t($fr, $en)
+// Usage : fpt__('key')          → langue admin (toujours FR)
+//         fpt__('key', 'inv')   → langue facture (configurée séparément)
+function fpt__( $key, $ctx = 'admin' ) {
+    static $strings = null;
+    if ( $strings === null ) $strings = fpt_strings();
+    $lang = ( $ctx === 'inv' ) ? fpt_invoice_lang() : fpt_lang();
+    if ( isset($strings[$key][$lang]) ) return $strings[$key][$lang];
+    if ( isset($strings[$key]['en']) )  return $strings[$key]['en'];
+    if ( isset($strings[$key]['fr']) )  return $strings[$key]['fr'];
+    return $key;
+}
+
+// Raccourci pour la facture : fpt_inv__('key')
+function fpt_inv__( $key ) {
+    return fpt__( $key, 'inv' );
+}
+
+// Alias de compatibilité — garde tout l'ancien code fonctionnel
+// Si la clé est connue dans le nouveau système → l'utilise
+// Sinon → comportement original (fr/en seulement)
 function fpt_t( $fr, $en ) {
+    // Chercher dans le tableau par valeur FR exacte
+    static $fr_index = null;
+    if ( $fr_index === null ) {
+        $fr_index = [];
+        foreach ( fpt_strings() as $key => $langs ) {
+            if ( isset($langs['fr']) ) $fr_index[$langs['fr']] = $key;
+        }
+    }
+    if ( isset($fr_index[$fr]) ) return fpt__($fr_index[$fr]);
+    // Fallback : comportement original pour les chaînes non encore migrées
     return fpt_lang() === 'en' ? $en : $fr;
 }
 
@@ -483,8 +689,8 @@ function fpt_collection_metabox_html( $post ) {
             var prix = document.getElementById('fpt_prix_input_' + lotId).value;
             var cur  = document.getElementById('fpt_currency_input_' + lotId).value;
             var msg  = document.getElementById('fpt_prix_msg_' + lotId);
-            if (!prix || parseFloat(prix) <= 0) { msg.style.color='red'; msg.textContent='⚠️ Entrez un prix valide.'; return; }
-            msg.style.color='#555'; msg.textContent='⏳ Enregistrement...';
+            if (!prix || parseFloat(prix) <= 0) { msg.style.color='red'; msg.textContent='<?php echo esc_js(fpt__('invalid_price')); ?>'; return; }
+            msg.style.color='#555'; msg.textContent='<?php echo esc_js(fpt__('saving')); ?>';
             fetch(ajaxurl, {
                 method: 'POST',
                 headers: {'Content-Type':'application/x-www-form-urlencoded'},
@@ -493,7 +699,7 @@ function fpt_collection_metabox_html( $post ) {
             .then(r => r.json())
             .then(data => {
                 if (data.success) {
-                    msg.style.color='green'; msg.textContent='✅ Prix enregistré !';
+                    msg.style.color='green'; msg.textContent='<?php echo esc_js(fpt__('saved_ok')); ?>';
                     setTimeout(() => location.reload(), 800);
                 } else {
                     msg.style.color='red'; msg.textContent='❌ Erreur : ' + (data.data || 'inconnue');
@@ -501,9 +707,9 @@ function fpt_collection_metabox_html( $post ) {
             });
         }
         function fptMarquerPaye(lotId) {
-            if (!confirm('Confirmer que la commission a été reçue ?')) return;
+            if (!confirm('<?php echo esc_js(fpt__('confirm_paid')); ?>')) return;
             var msg = document.getElementById('fpt_paid_msg_' + lotId);
-            msg.style.color='#555'; msg.textContent='⏳ Enregistrement...';
+            msg.style.color='#555'; msg.textContent='<?php echo esc_js(fpt__('saving')); ?>';
             fetch(ajaxurl, {
                 method: 'POST',
                 headers: {'Content-Type':'application/x-www-form-urlencoded'},
@@ -2071,7 +2277,7 @@ function fpt_shortcode_lot( $atts ) {
         <div class="fpt-lot-header">
             <div class="fpt-lot-badge">
                 <span class="fpt-lot-id"><?php echo esc_html( $lot_id ?: 'FP-PENDING' ); ?></span>
-                <span class="fpt-lot-verified">✓ Tracé</span>
+                <span class="fpt-lot-verified">✓ <?php echo fpt_t('Tracé','Traced'); ?></span>
             </div>
             <h2 class="fpt-lot-title"><?php echo esc_html( $titre ); ?></h2>
             <?php if ( $ville ): ?>
@@ -2094,18 +2300,18 @@ function fpt_shortcode_lot( $atts ) {
                     </div>
                     <div class="fpt-stat fpt-stat--green">
                         <span class="fpt-stat-value"><?php echo esc_html( $co2_display ); ?></span>
-                        <span class="fpt-stat-label">CO₂ évité</span>
+                        <span class="fpt-stat-label"><?php echo fpt_t('CO₂ évité','CO₂ avoided'); ?></span>
                     </div>
                     <?php if ( $prix ): ?>
                     <div class="fpt-stat">
                         <span class="fpt-stat-value"><?php echo esc_html( number_format( $prix, 0, ',', ' ' ) ); ?> DH</span>
-                        <span class="fpt-stat-label">Prix / tonne</span>
+                        <span class="fpt-stat-label"><?php echo fpt_t('Prix / tonne','Price / tonne'); ?></span>
                     </div>
                     <?php endif; ?>
                 </div>
 
                 <?php if ( $traced ): ?>
-                <p class="fpt-traced-date"><?php echo fpt_t('Tracé le','Traced on'); ?> <?php echo esc_html( date_i18n( 'd/m/Y à H:i', strtotime( $traced ) ) ); ?></p>
+                <p class="fpt-traced-date"><?php echo fpt_t('Tracé le','Traced on'); ?> <?php echo esc_html( date_i18n( 'd/m/Y' . fpt_t(' à H:i',' H:i'), strtotime( $traced ) ) ); ?></p>
                 <?php endif; ?>
 
                 <?php if ( $whatsapp ) :
@@ -2116,7 +2322,7 @@ function fpt_shortcode_lot( $atts ) {
 
             <div class="fpt-lot-qr">
                 <img src="<?php echo esc_url( $qr_url ); ?>" alt="QR Code lot <?php echo esc_attr( $lot_id ); ?>">
-                <p>Scanner pour accéder à ce lot</p>
+                <p><?php echo fpt_t('Scanner pour accéder à ce lot','Scan to access this batch'); ?></p>
             </div>
         </div>
     </div>
@@ -2133,8 +2339,9 @@ function fpt_shortcode_dashboard( $atts ) {
     $country_name = get_option( 'fpt_country_name', '' );
     $site_name    = get_option( 'fpt_site_name', 'FerayPro' );
 
-    $title_suffix = $country_name ? ( fpt_lang() === 'en' ? ' in ' : ' au ' ) . $country_name : '';
-    $subtitle     = fpt_t('Traçabilité en temps réel des déchets recyclés','Real-time traceability of recycled waste') . ( $country_name ? ( fpt_lang() === 'en' ? ' in ' : ' au ' ) . $country_name : '' );
+    $in_prep = [ 'fr' => ' au ', 'en' => ' in ', 'es' => ' en ', 'pt' => ' em ' ][ fpt_lang() ] ?? ' in ';
+    $title_suffix = $country_name ? $in_prep . $country_name : '';
+    $subtitle     = fpt_t('Traçabilité en temps réel des déchets recyclés','Real-time traceability of recycled waste') . ( $country_name ? $in_prep . $country_name : '' );
 
     // Équivalents impact
     $arbres     = round( $total_co2 * 45 );
@@ -2586,7 +2793,8 @@ function fpt_admin_page() {
     if ( isset( $_POST['fpt_save_settings'] ) && check_admin_referer('fpt_settings') ) {
         update_option( 'fpt_country_name',  sanitize_text_field( $_POST['fpt_country_name'] ) );
         update_option( 'fpt_site_name',     sanitize_text_field( $_POST['fpt_site_name'] ) );
-        update_option( 'fpt_language',      in_array( $_POST['fpt_language'], ['fr','en'] ) ? $_POST['fpt_language'] : 'fr' );
+        update_option( 'fpt_language', in_array( $_POST['fpt_language'] ?? '', ['','fr','en','es','pt'] ) ? $_POST['fpt_language'] : '' );
+        if (isset($_POST['fpt_invoice_language'])) update_option( 'fpt_invoice_language', in_array( $_POST['fpt_invoice_language'], ['fr','en','es','pt'] ) ? $_POST['fpt_invoice_language'] : 'fr' );
         update_option( 'fpt_key_poids',     sanitize_key( $_POST['fpt_key_poids'] ) );
         update_option( 'fpt_key_ville',     sanitize_key( $_POST['fpt_key_ville'] ) );
         update_option( 'fpt_key_whatsapp',  sanitize_key( $_POST['fpt_key_whatsapp'] ) );
@@ -2627,12 +2835,31 @@ function fpt_admin_page() {
                     <td><input type="text" id="fpt_country_name" name="fpt_country_name" value="<?php echo esc_attr($country_name); ?>" class="regular-text" placeholder="ex: Maroc, Congo, France, USA..."></td>
                 </tr>
                 <tr>
-                    <th><label for="fpt_language">Langue · Language</label></th>
+                    <th><label for="fpt_language">Langue interface front-end</label></th>
                     <td>
                         <select id="fpt_language" name="fpt_language">
-                            <option value="fr" <?php selected( get_option('fpt_language','fr'), 'fr' ); ?>>🇫🇷 Français</option>
-                            <option value="en" <?php selected( get_option('fpt_language','fr'), 'en' ); ?>>🇬🇧 English</option>
+                            <option value=""  <?php selected( get_option('fpt_language',''), ''   ); ?>>🌐 Auto (détection par domaine)</option>
+                            <option value="fr" <?php selected( get_option('fpt_language',''), 'fr' ); ?>>🇫🇷 Français (forcé)</option>
+                            <option value="en" <?php selected( get_option('fpt_language',''), 'en' ); ?>>🇬🇧 English (forcé)</option>
+                            <option value="es" <?php selected( get_option('fpt_language',''), 'es' ); ?>>🇪🇸 Español (forcé)</option>
+                            <option value="pt" <?php selected( get_option('fpt_language',''), 'pt' ); ?>>🇵🇹 Português (forcé)</option>
                         </select>
+                        <p class="description">
+                            Auto : <code>.fr / ma. / .cd</code> → FR · <code>feraypro.com / .us</code> → EN · <code>es.</code> → ES · <code>pt. / br.</code> → PT<br>
+                            L'admin WordPress est toujours en français, quel que soit ce réglage.
+                        </p>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="fpt_invoice_language">Langue de la facture</label></th>
+                    <td>
+                        <select id="fpt_invoice_language" name="fpt_invoice_language">
+                            <option value="fr" <?php selected( get_option('fpt_invoice_language','fr'), 'fr' ); ?>>🇫🇷 Français</option>
+                            <option value="en" <?php selected( get_option('fpt_invoice_language','fr'), 'en' ); ?>>🇬🇧 English</option>
+                            <option value="es" <?php selected( get_option('fpt_invoice_language','fr'), 'es' ); ?>>🇪🇸 Español</option>
+                            <option value="pt" <?php selected( get_option('fpt_invoice_language','fr'), 'pt' ); ?>>🇵🇹 Português</option>
+                        </select>
+                        <p class="description">Langue du PDF facture envoyé à l'acheteur. N'affecte pas l'admin.</p>
                     </td>
                 </tr>
                 <tr><td colspan="2"><hr><strong>🔧 Meta keys HivePress (Field Name dans l'attribut)</strong></td></tr>
@@ -3601,7 +3828,7 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #111; 
 <body>
 
 <div class="no-print">
-    <button onclick="window.print()">🖨️ Imprimer / Enregistrer en PDF</button>
+    <button onclick="window.print()"><?php echo fpt_inv__('inv_print'); ?></button>
 </div>
 
 <div class="page">
@@ -3610,23 +3837,24 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #111; 
     <div class="inv-header">
         <div><?php echo $logo_html; ?></div>
         <div class="inv-meta">
-            <strong>FACTURE N° <?php echo esc_html($inv); ?></strong>
-            Date : <?php echo date_i18n('d/m/Y'); ?><br>
-            <?php if ($date_col) echo 'Collecte : ' . date_i18n('d/m/Y', strtotime($date_col)); ?>
+            <?php $ilang = fpt_invoice_lang(); ?>
+            <strong><?php echo $ilang === 'en' ? 'INVOICE N°' : ( $ilang === 'es' ? 'FACTURA N°' : ( $ilang === 'pt' ? 'FATURA N°' : 'FACTURE N°' ) ); ?> <?php echo esc_html($inv); ?></strong>
+            <?php echo fpt_inv__('inv_date'); ?> <?php echo date_i18n('d/m/Y'); ?><br>
+            <?php if ($date_col) echo fpt_inv__('inv_collect_date') . ' ' . date_i18n('d/m/Y', strtotime($date_col)); ?>
         </div>
     </div>
 
     <!-- Parties -->
     <div class="parties">
         <div class="party">
-            <label>Émetteur</label>
+            <label><?php echo fpt_inv__('inv_emitter'); ?></label>
             <strong><?php echo esc_html($site); ?></strong>
             <span><?php echo esc_html($site_url); ?></span>
             <?php $adresse = get_option('fpt_adresse_facturation','');
             if ($adresse) echo '<span>' . nl2br(esc_html($adresse)) . '</span>'; ?>
         </div>
         <div class="party">
-            <label>Destinataire — Acheteur</label>
+            <label><?php echo fpt_inv__('inv_recipient'); ?></label>
             <strong><?php echo esc_html($acheteur); ?></strong>
         </div>
     </div>
@@ -3636,8 +3864,8 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #111; 
         <thead>
             <tr>
                 <th>Description</th>
-                <th>Poids</th>
-                <th style="text-align:right">Prix total lot</th>
+                <th><?php echo fpt_inv__('inv_weight'); ?></th>
+                <th style="text-align:right"><?php echo fpt_inv__('inv_total_price'); ?></th>
             </tr>
         </thead>
         <tbody>
@@ -3652,11 +3880,11 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #111; 
     <!-- Totaux -->
     <div class="totals">
         <div class="total-row">
-            <span>🤝 Vendeur reçoit directement (80%)</span>
+            <span><?php echo fpt_inv__('inv_vendor_share'); ?></span>
             <span><?php echo number_format($vend80, 2, '.', ' ') . ' ' . esc_html($currency); ?></span>
         </div>
         <div class="total-row">
-            <span>Commission <?php echo esc_html($site); ?> HT (20%)</span>
+            <span><?php echo fpt_inv__('inv_commission'); ?> <?php echo esc_html($site); ?> <?php echo fpt_inv__('inv_commission_ht'); ?> (20%)</span>
             <span><?php echo number_format($comm20, 2, '.', ' ') . ' ' . esc_html($currency); ?></span>
         </div>
         <?php if ($tva_rate > 0) : ?>
@@ -3667,37 +3895,37 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #111; 
         <?php else : ?>
         <div class="total-row tva">
             <span>TVA</span>
-            <span>Exonéré</span>
+            <span><?php echo fpt_inv__('inv_tva_exempt'); ?></span>
         </div>
         <?php endif; ?>
         <div class="total-row main">
-            <span>💰 TOTAL DÛ À <?php echo esc_html(strtoupper($site)); ?> TTC</span>
+            <span>💰 <?php echo fpt_inv__('inv_total_due'); ?> <?php echo esc_html(strtoupper($site)); ?> <?php echo fpt_inv__('inv_ttc'); ?></span>
             <span class="val"><?php echo number_format($comm20_ttc, 2, '.', ' ') . ' ' . esc_html($currency); ?></span>
         </div>
     </div>
 
     <?php if ($partenaire) : ?>
     <div class="partner-box">
-        🤝 <strong>Partenaire référent : <?php echo esc_html($partenaire['nom']); ?></strong> —
-        Commission à reverser par <?php echo esc_html($site); ?> :
+        🤝 <strong><?php echo fpt_inv__('inv_partner_ref'); ?> <?php echo esc_html($partenaire['nom']); ?></strong> —
+        <?php echo fpt_inv__('inv_partner_comm'); ?> <?php echo esc_html($site); ?> :
         <strong><?php echo number_format($fp10, 2, '.', ' ') . ' ' . esc_html($currency); ?></strong> (10%)
     </div>
     <?php endif; ?>
 
     <!-- Mode de règlement -->
     <div class="note">
-        <strong>Mode de règlement :</strong><br>
-        • L'acheteur règle <strong><?php echo number_format($vend80, 2, '.', ' ') . ' ' . esc_html($currency); ?></strong> directement au vendeur.<br>
-        • L'acheteur transfère <strong><?php echo number_format($comm20_ttc, 2, '.', ' ') . ' ' . esc_html($currency); ?> TTC</strong> à <?php echo esc_html($site); ?>.<br>
+        <strong><?php echo fpt_inv__('inv_payment_title'); ?></strong><br>
+        • <?php echo fpt_inv__('inv_vendor_pays'); ?> <strong><?php echo number_format($vend80, 2, '.', ' ') . ' ' . esc_html($currency); ?></strong> <?php echo fpt_inv__('inv_directly'); ?><br>
+        • <?php echo fpt_inv__('inv_buyer_transfers'); ?> <strong><?php echo number_format($comm20_ttc, 2, '.', ' ') . ' ' . esc_html($currency); ?> <?php echo fpt_inv__('inv_ttc'); ?></strong> <?php echo fpt_inv__('inv_to_site'); ?> <?php echo esc_html($site); ?>.<br>
         <?php if ($rib_iban) echo '🏦 IBAN : <strong>' . esc_html($rib_iban) . '</strong><br>'; ?>
-        <?php if ($rib_wa)   echo '📱 Paiement mobile : <strong>' . esc_html($rib_wa) . '</strong>'; ?>
+        <?php if ($rib_wa)   echo '📱 ' . ( $ilang === 'en' ? 'Mobile payment' : ( $ilang === 'es' ? 'Pago móvil' : ( $ilang === 'pt' ? 'Pagamento móvel' : 'Paiement mobile' ) ) ) . ' : <strong>' . esc_html($rib_wa) . '</strong>'; ?>
     </div>
 
     <!-- Footer -->
     <div class="inv-footer">
         <?php echo esc_html($site); ?> · <?php echo esc_html($site_url); ?> ·
-        Facture N° <?php echo esc_html($inv); ?> · <?php echo date_i18n('d/m/Y'); ?><br>
-        Document généré par FerayPro Tracer — Traçabilité des déchets recyclés
+        <?php echo $ilang === 'en' ? 'Invoice' : ( $ilang === 'es' ? 'Factura' : ( $ilang === 'pt' ? 'Fatura' : 'Facture' ) ); ?> N° <?php echo esc_html($inv); ?> · <?php echo date_i18n('d/m/Y'); ?><br>
+        <?php echo fpt_inv__('inv_footer_doc'); ?>
     </div>
 
 </div>
