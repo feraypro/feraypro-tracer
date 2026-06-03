@@ -2,22 +2,40 @@
 
 **Open-source waste batch traceability plugin for WordPress / HivePress**
 
-Automatically calculates CO₂ avoided, child health impact, and commission invoicing for every recycled waste batch. Built for [FerayPro Morocco](https://ma.feraypro.com), [FerayPro DRC](https://cd.feraypro.com), [FerayPro France](https://fr.feraypro.com), and [FerayPro USA](https://feraypro.com) — a circular waste marketplace operating globally.
+Automatically calculates CO₂ avoided, child health impact, commission invoicing, and financial reporting for every recycled waste batch. Built for [FerayPro Morocco](https://ma.feraypro.com), [FerayPro DRC](https://cd.feraypro.com), [FerayPro France](https://fr.feraypro.com), and [FerayPro USA](https://feraypro.com) — a circular waste marketplace operating globally.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.8.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-1.9.0-blue.svg)](CHANGELOG.md)
 [![UNICEF Venture Fund](https://img.shields.io/badge/UNICEF-Venture%20Fund%202026-00aeef.svg)](https://unicefinnovationfund.org)
+
+---
+
+## 📁 Structure du plugin
+
+```
+feraypro-tracer/
+├── feraypro-tracer.php          ← Plugin principal (CO₂, lots, factures, partenaires)
+├── tracer.css                   ← Styles publics (blocs inline, lot card, dashboard CO₂)
+├── modules/
+│   └── finance/
+│       ├── finance.php          ← Module dashboard financier [fpt_dashboard_finance]
+│       └── finance.css          ← Styles du dashboard financier
+├── CHANGELOG.md
+└── README.md
+```
+
+> **Architecture modulaire** : `feraypro-tracer.php` charge automatiquement tous les modules via `require_once` au démarrage. Ajouter un module = créer un dossier dans `modules/` et l'enregistrer dans le `require_once` du plugin principal.
 
 ---
 
 ## 🌍 Live Demo
 
-| Site | Dashboard | Methodology |
-|------|-----------|-------------|
-| Morocco | [ma.feraypro.com/impact](https://ma.feraypro.com/impact) | [METHODOLOGY.md](METHODOLOGY.md) |
-| DR Congo | [cd.feraypro.com/impact](https://cd.feraypro.com/impact) | — |
-| France | [fr.feraypro.com/impact](https://fr.feraypro.com/impact) | — |
-| USA | [feraypro.com/impact](https://feraypro.com/impact) | — |
+| Site | Dashboard CO₂ | Dashboard Finance |
+|------|--------------|-------------------|
+| Morocco | [ma.feraypro.com/impact](https://ma.feraypro.com/impact) | [ma.feraypro.com/finance](https://ma.feraypro.com/finance) |
+| DR Congo | [cd.feraypro.com/impact](https://cd.feraypro.com/impact) | [cd.feraypro.com/finance](https://cd.feraypro.com/finance) |
+| France | [fr.feraypro.com/impact](https://fr.feraypro.com/impact) | [fr.feraypro.com/finance](https://fr.feraypro.com/finance) |
+| USA | [feraypro.com/impact](https://feraypro.com/impact) | [feraypro.com/finance](https://feraypro.com/finance) |
 
 ---
 
@@ -31,10 +49,47 @@ When a seller publishes a waste listing on HivePress / ListingHive, the plugin a
 4. **Generates a QR code** linking to the public batch traceability page
 5. **Updates the live impact dashboard** with cumulative totals and net CO₂ balance
 6. **Generates a commission invoice** (PDF) when the batch is collected — 20% to FerayPro, 80% to vendor
+7. **Tracks marketing partner referrals** via `?ref=` cookie system
+8. **Reports financial KPIs** via the Finance Dashboard module
 
 ---
 
-## 💰 Commission & Invoicing Module (v1.8.0)
+## 📋 Shortcodes
+
+| Shortcode | Description |
+|-----------|-------------|
+| `[fpt_dashboard]` | Live global environmental impact dashboard |
+| `[fpt_dashboard_finance]` | **NEW v1.9.0** — Financial dashboard (sales, commissions, pipeline, partners) |
+| `[fpt_lot id="241"]` | Public traceability page for a batch |
+| `[fpt_methodologie]` | Calculation methodology page |
+| `[fpt_acheteur id="XXX"]` | Buyer dashboard — CO₂ produced by recycling |
+| `[fpt_partenaires]` | Public partner grid — logos, batch count, CO₂ avoided per partner |
+
+### `[fpt_dashboard_finance]` — Paramètres
+
+| Paramètre | Valeurs | Défaut | Description |
+|-----------|---------|--------|-------------|
+| `period` | `0`, `7`, `30`, `90`, `365` | `30` | Fenêtre temporelle en jours. `0` = depuis le début. |
+| `lang` | `fr`, `en` | auto | Langue. Vide = détection automatique par domaine. |
+
+```
+[fpt_dashboard_finance]                          ← 30 derniers jours, langue auto
+[fpt_dashboard_finance period="0"]               ← tout l'historique
+[fpt_dashboard_finance period="365" lang="en"]   ← année en cours, anglais
+```
+
+**Indicateurs affichés :**
+- KPIs : lots tracés, collectés, ventes totales, commission FerayPro TTC, commissions partenaires, vendeurs, commissions impayées, délai moyen de collecte
+- Pipeline visuel des lots (barres de progression par statut)
+- Graphique mensuel 12 mois (Chart.js)
+- Répartition des revenus : split dynamique FP / partenaires / vendeurs (20/10/80 avec partenaire, 20/80 sans)
+- Détail des lots avec commissions impayées (lien admin direct)
+- Top partenaires marketing (commissions payées vs à percevoir)
+- Top 10 acheteurs (volume, poids, CO₂)
+
+---
+
+## 💰 Commission & Invoicing Module (v1.8.0+)
 
 When admin confirms a batch collection:
 
@@ -47,32 +102,6 @@ When admin confirms a batch collection:
 4. Invoice includes: lot details, price breakdown, TVA, payment instructions (IBAN + Mobile Money)
 5. Admin clicks **"💰 Marquer comme payée"** when payment is received
 
-### Invoice features
-- Uses the site's WordPress custom logo (or favicon fallback)
-- Full A4 page on print / PDF export
-- TVA configurable per site (0 = exempt, 20% France, 16% DRC…)
-- No payment status shown on invoice (sent to request payment)
-- Partner commission block shown if `?ref=` referral exists
-
----
-
-## 📊 Impact Dashboard
-
-| Indicator | Source |
-|-----------|--------|
-| ♻️ Batches traced | Live count |
-| ⚖️ Waste to recycle (kg/lb) | Sum of batch weights |
-| 🌱 CO₂ avoided (net gain) | ADEME/FEDEREC net gain factors |
-| 🏭 CO₂ produced (recycling) | FEDEREC/ADEME LCA 2017 process factors |
-| ⚖️ Net CO₂ balance | Avoided − Produced |
-| 🔴 Lead diverted (kg) | WHO Lead Report 2021 |
-| ☁️ PM2.5 diverted (kg) | EPA AP-42 2022 |
-| ⚠️ Cadmium diverted (g) | Pure Earth DB 2020 |
-| 🧠 Mercury diverted (g) | UNEP Minamata 2018 |
-| 📊 ERRI score | WHO GHO 2021 + HEI 2020 × density multiplier |
-
-Full methodology: [METHODOLOGY.md](METHODOLOGY.md)
-
 ---
 
 ## ⚡ Quick Start
@@ -84,134 +113,82 @@ Full methodology: [METHODOLOGY.md](METHODOLOGY.md)
 
 ### Installation
 
-1. Upload ZIP → **Plugins → Add New → Upload**
+1. Upload the `feraypro-tracer/` folder to `wp-content/plugins/`
 2. Activate → go to **FP Tracer → ⚙️ Paramètres**
+3. Create pages with shortcodes:
+   - Environmental: `[fpt_dashboard]`
+   - Financial: `[fpt_dashboard_finance]` *(protect with `manage_options` role)*
+
+### Protect the finance page (recommended)
+
+Add to your theme's `functions.php`:
+
+```php
+add_action('template_redirect', function() {
+    if ( is_page('finance') && ! current_user_can('manage_options') ) {
+        wp_redirect( home_url('/') ); exit;
+    }
+});
+```
 
 ### Configuration by country
 
 | Setting | Morocco 🇲🇦 | USA 🇺🇸 | DRC 🇨🇩 | France 🇫🇷 |
 |---------|------------|---------|---------|-----------|
 | Language | 🇫🇷 Français | 🇬🇧 English | 🇫🇷 Français | 🇫🇷 Français |
-| Country | Maroc | USA | Congo | France |
 | Currency | MAD | USD | USD | EUR |
 | TVA | 0% | 0% | 16% | 20% |
-| Weight field | `poids` | `weight` | `poids` | `poids` |
 | Weight unit | kg | lb | kg | kg |
-| City field | `ville` | `city` | `ville` | `ville` |
-| Phone field | `whatsapp` | `telephone` | `whatsapp` | `whatsapp` |
-| Price field | `prixvendeur` | `pricebuyer` | `prixvendeur` | `prixvendeur` |
-| Prix du jour slug | `prix` | `price` | `prix` | `prix` |
-| Buyers slug | `acheteurs` | `buyers` | `acheteurs` | `acheteurs` |
-
-> **Note:** Currency auto-detected by domain if not set: `.fr` → EUR · `.cd`/`.us`/`feraypro.com` → USD · default → MAD.  
-> Buyers slug supports comma-separated values: `acheteurs,buyers`
 
 ---
 
-## 📋 Shortcodes
+## 🗝️ Meta Keys WordPress
 
-| Shortcode | Description |
-|-----------|-------------|
-| `[fpt_dashboard]` | Live global impact dashboard |
-| `[fpt_lot id="241"]` | Public traceability page for a batch |
-| `[fpt_methodologie]` | Calculation methodology page |
-| `[fpt_acheteur id="XXX"]` | Buyer dashboard — CO₂ produced by recycling |
-| `[fpt_partenaires]` | Public partner grid — logos, batch count, CO₂ avoided per partner |
-
----
-
-## 🤝 Partner Tracking — Affiliate System
-
-Traffic platforms (Avito, LeBonCoin, Jumia…) send visitors via a unique referral link. When a visitor publishes a listing, the batch is automatically attributed to the partner.
-
-```
-https://ma.feraypro.com/?ref=avito
-https://ma.feraypro.com/?ref=leboncoin
-```
-
-**How it works:**
-1. Visitor arrives via `?ref=avito` → slug stored in a **30-day cookie**
-2. Visitor publishes a listing → `_fpt_ref=avito` saved to the batch post meta
-3. **Banner displayed first** on the listing page, above all content
-4. When batch is collected and invoiced → partner receives **10% of lot price**
-5. Admin dashboard (**FP Tracer → 🤝 Partners**) shows per-partner stats: batches referred, collected, total weight, CO₂ avoided, commission %
-
-**Admin features:**
-- Add/edit/delete partners from WordPress admin — no code changes needed
-- Upload partner logo via WordPress media library
-- Set partner color, commission %, active/inactive toggle
-- Copy-ready referral link for each partner
-
----
-
-## 🔬 ERRI — Exposure Risk Reduction Index
-
-```
-ERRI = ((Lead diverted kg × 50) + (PM2.5 diverted kg × 10)) × density_multiplier
-```
-
-Density multiplier by country:
-- DRC: ×1.8 · Morocco: ×1.2 · Senegal: ×1.3 · France/USA: ×0.7–0.8
-
-> ERRI is an estimative proxy — not peer-reviewed or clinically validated.
-
----
-
-## 🔧 CO₂ Net Gain Factors (ADEME/FEDEREC)
-
-| Material | Net gain | Primary | Recycled |
-|----------|----------|---------|----------|
-| Aluminum | **6.88 t/t** | 7.24 | 0.36 |
-| Copper | **0.141 t/t** | 1.445 | 1.304 |
-| Stainless steel / Inox | **2.10 t/t** | 2.8 | 0.7 |
-| Gold / Or | **14.00 t/t** | ~16.0 | ~2.0 |
-| Platinum | **11.00 t/t** | ~13.0 | ~2.0 |
-| Smartphone / Phone | **4.00 t/t** | — | — |
-| E-waste / Electronics | **3.50 t/t** | — | — |
-| Steel / Scrap | **1.10 t/t** | 1.9 | 0.58 |
-| PET Plastic | **1.50 t/t** | 2.15 | 0.65 |
-| Paper / Cardboard | **0.050 t/t** | 0.92 | 0.87 |
-| Default (unrecognized) | **0.50 t/t** | — | — |
-
-Full table (42 materials) + sources: [METHODOLOGY.md](METHODOLOGY.md)
+| Meta key | Type | Description |
+|----------|------|-------------|
+| `_fpt_co2_avoided` | float | CO₂ évité (tonnes) |
+| `_fpt_lot_id` | string | Batch ID public `FP-XXXXXXXX` |
+| `_fpt_traced_at` | datetime | Date de tracé |
+| `_fpt_collected` | `'1'` | Lot collecté |
+| `_fpt_collected_date` | datetime | Date de collecte |
+| `_fpt_acheteur_id` | int | ID post acheteur |
+| `_fpt_prix_lot` | float | Prix de vente |
+| `_fpt_commission_paid` | `'paid'` | Commission payée |
+| `_fpt_commission_paid_date` | date | Date du paiement |
+| `_fpt_invoice_number` | string | N° facture `FP-INV-YYYYMM-ID` |
+| `_fpt_ref` | string | Slug partenaire référent |
+| `_fpt_co2_transport` | float | CO₂ transport (tonnes) |
+| `_fpt_co2_total` | float | CO₂ total (matière + transport) |
 
 ---
 
 ## 🗺️ Roadmap
 
-### Phase 1 — MVP (Current — v1.8.0)
+### Phase 1 — MVP (Current — v1.9.0)
 - [x] CO₂ net gain engine (200+ materials, FR + EN + Darija/Lingala/Swahili NLP)
 - [x] CO₂ process factors for buyer dashboard (FEDEREC/ADEME LCA 2017)
 - [x] ERRI with population density multiplier
-- [x] Health co-occurrence fix — multi-pollutant per batch
 - [x] QR code + Digital Batch ID per batch
-- [x] Public impact dashboard (CO₂ avoided · CO₂ produced · net balance)
+- [x] Public environmental impact dashboard
 - [x] Multi-country (Morocco, DRC, France, USA)
-- [x] Bilingual FR/EN + transitional Darija/Lingala/Swahili
-- [x] Configurable field names, weight units (kg/lb), 50+ world currencies
-- [x] Prix du jour block — buyer prices on each listing
+- [x] Bilingual FR/EN + Darija/Lingala/Swahili
+- [x] Configurable fields, kg/lb, 50+ currencies
 - [x] Collection confirmation metabox (admin)
 - [x] Buyer dashboard (`[fpt_acheteur]`)
-- [x] Partner affiliate tracking — `?ref=` cookie, banner, admin dashboard, commission tracking
-- [x] **Commission & invoicing module** — 20% FerayPro / 80% vendor / 10% partner split, PDF invoice (A4, logo, TVA), AJAX price save, mark-as-paid
+- [x] Partner affiliate tracking — `?ref=` cookie, banner, admin dashboard
+- [x] Commission & invoicing module — 20% FP / 80% vendor / 10% partner, PDF A4
+- [x] **Financial dashboard** `[fpt_dashboard_finance]` — v1.9.0
+- [x] Architecture modulaire (`modules/`)
 
 ### Phase 2 — ML Refinement (2026–2027)
 - [ ] Random Forest model (Morocco + DRC field data)
-- [ ] Statistical confidence intervals
+- [ ] Statistical confidence intervals on CO₂ factors
 - [ ] Geospatial impact map
 - [ ] Full Arabic, Lingala, Swahili keyword vocabularies
 - [ ] TF-IDF fallback classification
 - [ ] Export API for governments/NGOs
 - [ ] GitHub auto-update across all country sites
-
----
-
-## 🤝 Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md). Most impactful contributions:
-- New material keywords in any language
-- Arabic, Lingala, Swahili translations
-- Emission factor corrections with source citations
+- [ ] Transient cache for finance dashboard (large datasets)
 
 ---
 
@@ -238,7 +215,7 @@ MIT License — Copyright (c) 2026 FerayPro
 ## 🏷️ Citation
 
 ```
-FerayPro Tracer v1.8.0 (2026). Open-source waste batch traceability plugin.
+FerayPro Tracer v1.9.0 (2026). Open-source waste batch traceability plugin.
 MIT License. https://github.com/feraypro/feraypro-tracer
 ```
 

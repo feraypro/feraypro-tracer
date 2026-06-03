@@ -2,8 +2,8 @@
 /**
  * Plugin Name: FerayPro Tracer
  * Plugin URI: https://ma.feraypro.com/impact
- * Description: Traçabilité des lots de déchets recyclés avec calcul CO₂ évité et génération de QR code. Module open source pour UNICEF Venture Fund.
- * Version: 1.8.0
+ * Description: Traçabilité des lots de déchets recyclés avec calcul CO₂ évité, génération de QR code et dashboard financier (commissions, ventes, partenaires). Module open source pour UNICEF Venture Fund.
+ * Version: 1.9.0
  * Author: FerayPro
  * License: MIT
  * Text Domain: feraypro-tracer
@@ -11,9 +11,12 @@
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'FPT_VERSION',    '1.8.0' );
+define( 'FPT_VERSION',    '1.9.0' );
 define( 'FPT_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FPT_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
+
+// ─── Chargement des modules ────────────────────────────────────────────────────
+require_once FPT_PLUGIN_DIR . 'modules/finance/finance.php';
 
 // ─── Normalisation texte multilingue ─────────────────────────────────────────
 // Supporte FR, EN + translittérations Darija, Lingala, Swahili de base
@@ -3039,9 +3042,11 @@ function fpt_admin_page() {
         <h2>📋 Shortcodes disponibles</h2>
         <ul>
             <li><code>[fpt_dashboard]</code> — Dashboard global impact sur n'importe quelle page</li>
+            <li><code>[fpt_dashboard_finance]</code> — Dashboard financier (ventes, commissions, partenaires) — <em>Nouveau v1.9.0</em></li>
             <li><code>[fpt_lot id="241"]</code> — Fiche publique d'un lot spécifique</li>
             <li><code>[fpt_methodologie]</code> — Page méthodologie complète</li>
             <li><code>[fpt_acheteur id="XXX"]</code> — Dashboard d'un acheteur régulier (remplacer XXX par l'ID du post acheteur)</li>
+            <li><code>[fpt_partenaires]</code> — Grille publique des partenaires</li>
         </ul>
 
         <h2>🔄 Recalculer les stats</h2>
