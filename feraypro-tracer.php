@@ -2,7 +2,7 @@
 /**
  * Plugin Name: FerayPro Tracer
  * Plugin URI: https://ma.feraypro.com/impact
- * Description: Traçabilité des lots de déchets recyclés avec calcul CO₂ évité, génération de QR code et dashboard financier (commissions, ventes, partenaires). Module open source pour UNICEF Venture Fund.
+ * Description: Traçabilité des lots de déchets recyclés avec calcul CO₂ évité et génération de QR code. Module open source pour UNICEF Venture Fund.
  * Version: 1.9.0
  * Author: FerayPro
  * License: MIT
@@ -2178,37 +2178,105 @@ function fpt_on_listing_save( $post_id, $post, $update ) {
     if ( wp_is_post_revision( $post_id ) ) return;
     if ( $post->post_status !== 'publish' ) return;
 
+    // Exclure les fiches acheteurs (catégorie "acheteurs" / "buyers")
+    $acheteur_slugs = array_map( 'trim', explode( ',', get_option( 'fpt_acheteurs_cat_slug', 'acheteurs' ) ) );
+    if ( has_term( $acheteur_slugs, 'hp_listing_category', $post_id ) ) return;
+
     $titre    = get_the_title( $post_id );
     $poids_kg = fpt_get_poids_kg( $post_id );
-    $ville    = get_post_meta( $post_id, fpt_key_ville(), true );
 
     if ( $poids_kg <= 0 ) return;
 
     $co2 = fpt_calculate_co2( $titre, $poids_kg );
 
-    // Stocker les données de traçabilité
+    // Stocker les données de traçabilité sur le lot
     update_post_meta( $post_id, '_fpt_co2_avoided', $co2 );
-    update_post_meta( $post_id, '_fpt_traced_at', current_time( 'mysql' ) );
     update_post_meta( $post_id, '_fpt_lot_id', 'FP-' . strtoupper( substr( md5( $post_id . $titre ), 0, 8 ) ) );
+    // _fpt_traced_at : ne mettre la date que lors de la première publication (pas aux updates)
+    if ( ! get_post_meta( $post_id, '_fpt_traced_at', true ) ) {
+        update_post_meta( $post_id, '_fpt_traced_at', current_time( 'mysql' ) );
+    }
 
-    // Mettre à jour les totaux globaux
-    fpt_update_global_stats( $co2, $poids_kg );
+    // Synchroniser les totaux globaux en temps réel (via SQL COUNT/SUM)
+    // → immunisé contre les doubles comptages lors des mises à jour
+    add_action( 'shutdown', 'fpt_sync_options_from_live', 5 );
 }
 
-// ─── Mettre à jour les stats globales ─────────────────────────────────────────
+// ─── Stats en temps réel depuis la BDD ────────────────────────────────────────
+// Source unique de vérité : on compte les posts publiés avec _fpt_co2_avoided.
+// Les options fpt_total_* restent pour rétrocompatibilité mais sont
+// synchronisées à chaque recalcul et à chaque suppression/dépublication.
+function fpt_get_live_stats() {
+    global $wpdb;
+
+    // Une seule requête SQL : COUNT + SUM sur les posts publiés avec CO2 tracé
+    // On exclut les fiches acheteurs (pas de champ poids = pas de _fpt_co2_avoided)
+    $row = $wpdb->get_row( $wpdb->prepare("
+        SELECT
+            COUNT( DISTINCT p.ID )          AS lots,
+            COALESCE( SUM( pm_co2.meta_value + 0 ), 0 ) AS co2,
+            COALESCE( SUM( pm_poids.meta_value + 0 ), 0 ) AS poids
+        FROM {$wpdb->posts} p
+        INNER JOIN {$wpdb->postmeta} pm_co2
+            ON pm_co2.post_id = p.ID
+            AND pm_co2.meta_key = '_fpt_co2_avoided'
+            AND pm_co2.meta_value != ''
+            AND pm_co2.meta_value + 0 > 0
+        INNER JOIN {$wpdb->postmeta} pm_poids
+            ON pm_poids.post_id = p.ID
+            AND pm_poids.meta_key = %s
+            AND pm_poids.meta_value + 0 > 0
+        WHERE p.post_type   = 'hp_listing'
+          AND p.post_status = 'publish'
+    ", fpt_key_poids() ) );
+
+    $lots  = (int)   ( $row->lots  ?? 0 );
+    $co2   = (float) ( $row->co2   ?? 0 );
+    $poids = (float) ( $row->poids ?? 0 );
+
+    return [
+        'total_lots'  => $lots,
+        'total_co2'   => round( $co2, 4 ),
+        'total_poids' => round( $poids, 3 ),
+    ];
+}
+
+// ─── Mettre à jour les stats globales (appelée au save_post) ──────────────────
+// On délègue maintenant à fpt_get_live_stats() pour garder les options à jour.
 function fpt_update_global_stats( $co2_new, $poids_new ) {
-    $total_co2   = (float) get_option( 'fpt_total_co2', 0 );
-    $total_poids = (float) get_option( 'fpt_total_poids', 0 );
-    $total_lots  = (int)   get_option( 'fpt_total_lots', 0 );
-
-    update_option( 'fpt_total_co2',   $total_co2 + $co2_new );
-    update_option( 'fpt_total_poids', $total_poids + $poids_new );
-    update_option( 'fpt_total_lots',  $total_lots + 1 );
+    // Recalcul live immédiat → synchronise les options
+    // Léger délai pour laisser WordPress valider le post avant la requête SQL
+    add_action( 'shutdown', 'fpt_sync_options_from_live', 5 );
 }
 
-// ─── Recalculer les stats globales depuis zéro ────────────────────────────────
+function fpt_sync_options_from_live() {
+    $stats = fpt_get_live_stats();
+    update_option( 'fpt_total_lots',  $stats['total_lots'],  false );
+    update_option( 'fpt_total_co2',   $stats['total_co2'],   false );
+    update_option( 'fpt_total_poids', $stats['total_poids'], false );
+}
+
+// ─── Décrémenter quand une annonce est dépubliée / mise à la corbeille ────────
+add_action( 'transition_post_status', 'fpt_on_listing_status_change', 10, 3 );
+function fpt_on_listing_status_change( $new_status, $old_status, $post ) {
+    if ( $post->post_type !== 'hp_listing' ) return;
+    // On ne réagit que si le post quitte l'état "publish"
+    if ( $old_status !== 'publish' ) return;
+    if ( $new_status === 'publish' ) return;
+    // Resynchroniser les options (le post n'est plus publish → SQL l'exclura)
+    add_action( 'shutdown', 'fpt_sync_options_from_live', 5 );
+}
+
+// ─── Décrémenter quand une annonce est supprimée définitivement ───────────────
+add_action( 'before_delete_post', 'fpt_on_listing_delete', 10, 1 );
+function fpt_on_listing_delete( $post_id ) {
+    if ( get_post_type( $post_id ) !== 'hp_listing' ) return;
+    // Resynchroniser après suppression
+    add_action( 'shutdown', 'fpt_sync_options_from_live', 5 );
+}
+
+// ─── Recalculer les stats globales depuis zéro (bouton admin) ─────────────────
 function fpt_recalculate_global_stats() {
-    // Récupérer TOUTES les annonces publiées (pas seulement celles déjà tracées)
     $listings = get_posts([
         'post_type'   => 'hp_listing',
         'post_status' => 'publish',
@@ -2220,12 +2288,11 @@ function fpt_recalculate_global_stats() {
 
     foreach ( $listings as $id ) {
         $poids_kg = (float) fpt_get_poids_kg( $id );
-        if ( $poids_kg <= 0 ) continue; // ignorer annonces sans poids (acheteurs)
+        if ( $poids_kg <= 0 ) continue; // ignorer fiches acheteurs (pas de poids)
 
         $titre = get_the_title( $id );
         $co2   = fpt_calculate_co2( $titre, $poids_kg );
 
-        // Enregistrer les metas sur chaque annonce
         update_post_meta( $id, '_fpt_co2_avoided', $co2 );
         update_post_meta( $id, '_fpt_lot_id', 'FP-' . strtoupper( substr( md5( $id . $titre ), 0, 8 ) ) );
         if ( ! get_post_meta( $id, '_fpt_traced_at', true ) ) {
@@ -2237,9 +2304,11 @@ function fpt_recalculate_global_stats() {
         $total_lots++;
     }
 
-    update_option( 'fpt_total_co2',   round( $total_co2, 4 ) );
-    update_option( 'fpt_total_poids', $total_poids );
-    update_option( 'fpt_total_lots',  $total_lots );
+    update_option( 'fpt_total_co2',   round( $total_co2, 4 ), false );
+    update_option( 'fpt_total_poids', $total_poids,           false );
+    update_option( 'fpt_total_lots',  $total_lots,            false );
+
+    return $total_lots; // retourne le nombre pour confirmation admin
 }
 
 // ─── Shortcode : fiche publique d'un lot ──────────────────────────────────────
@@ -2336,9 +2405,14 @@ function fpt_shortcode_lot( $atts ) {
 // ─── Shortcode : Dashboard global ─────────────────────────────────────────────
 add_shortcode( 'fpt_dashboard', 'fpt_shortcode_dashboard' );
 function fpt_shortcode_dashboard( $atts ) {
-    $total_co2    = (float) get_option( 'fpt_total_co2', 0 );
-    $total_poids  = (float) get_option( 'fpt_total_poids', 0 );
-    $total_lots   = (int)   get_option( 'fpt_total_lots', 0 );
+    // ── Lecture en temps réel ─────────────────────────────────────────────────
+    // fpt_get_live_stats() compte directement les posts publiés avec _fpt_co2_avoided
+    // → immunisé contre les suppressions, la corbeille et les dépublications.
+    $live         = fpt_get_live_stats();
+    $total_co2    = $live['total_co2'];
+    $total_poids  = $live['total_poids'];
+    $total_lots   = $live['total_lots'];
+
     $country_name = get_option( 'fpt_country_name', '' );
     $site_name    = get_option( 'fpt_site_name', 'FerayPro' );
 
@@ -2747,9 +2821,49 @@ function fpt_admin_menu() {
 }
 
 function fpt_admin_page() {
+    if ( isset( $_POST['fpt_cleanup_refs'] ) && check_admin_referer('fpt_recalc') ) {
+        // Supprimer _fpt_ref des fiches acheteurs (correction rétroactive)
+        $acheteur_slugs = array_map( 'trim', explode( ',', get_option( 'fpt_acheteurs_cat_slug', 'acheteurs' ) ) );
+        $acheteurs_ids  = get_posts([
+            'post_type'   => 'hp_listing',
+            'post_status' => ['publish','draft','trash'],
+            'numberposts' => -1,
+            'fields'      => 'ids',
+            'tax_query'   => [[
+                'taxonomy' => 'hp_listing_category',
+                'field'    => 'slug',
+                'terms'    => $acheteur_slugs,
+            ]],
+        ]);
+        $cleaned = 0;
+        foreach ( $acheteurs_ids as $id ) {
+            if ( get_post_meta( $id, '_fpt_ref', true ) ) {
+                delete_post_meta( $id, '_fpt_ref' );
+                $cleaned++;
+            }
+        }
+        // Aussi supprimer _fpt_ref des lots sans poids (sécurité supplémentaire)
+        $no_poids = get_posts([
+            'post_type'   => 'hp_listing',
+            'post_status' => ['publish','draft'],
+            'numberposts' => -1,
+            'fields'      => 'ids',
+            'meta_query'  => [
+                'relation' => 'AND',
+                [ 'key' => '_fpt_ref', 'compare' => 'EXISTS' ],
+                [ 'key' => fpt_key_poids(), 'value' => '0', 'compare' => '<=', 'type' => 'NUMERIC' ],
+            ],
+        ]);
+        foreach ( $no_poids as $id ) {
+            delete_post_meta( $id, '_fpt_ref' );
+            $cleaned++;
+        }
+        echo '<div class="notice notice-success"><p>✅ Nettoyage terminé — <strong>' . $cleaned . ' _fpt_ref orphelins supprimés</strong> des fiches acheteurs et lots sans poids.</p></div>';
+    }
+
     if ( isset( $_POST['fpt_recalculate'] ) && check_admin_referer('fpt_recalc') ) {
-        fpt_recalculate_global_stats();
-        echo '<div class="notice notice-success"><p>Stats recalculées.</p></div>';
+        $n = fpt_recalculate_global_stats();
+        echo '<div class="notice notice-success"><p>✅ Stats recalculées depuis zéro — <strong>' . $n . ' lots actifs</strong> trouvés (annonces publiées avec poids).</p></div>';
     }
 
     // Recalculer le CO₂ transport de tous les lots collectés (correction bug)
@@ -2816,9 +2930,15 @@ function fpt_admin_page() {
         if (isset($_POST['fpt_adresse_facturation'])) update_option('fpt_adresse_facturation',  sanitize_text_field($_POST['fpt_adresse_facturation']));
         echo '<div class="notice notice-success"><p>Paramètres sauvegardés / Settings saved.</p></div>';
     }
-    $total_co2    = (float) get_option( 'fpt_total_co2', 0 );
-    $total_poids  = (float) get_option( 'fpt_total_poids', 0 );
-    $total_lots   = (int)   get_option( 'fpt_total_lots', 0 );
+    // ── Stats en temps réel pour l'admin ───────────────────────────────────────
+    $live_stats   = fpt_get_live_stats();
+    $total_co2    = $live_stats['total_co2'];
+    $total_poids  = $live_stats['total_poids'];
+    $total_lots   = $live_stats['total_lots'];
+    // Synchroniser les options avec la réalité
+    update_option( 'fpt_total_lots',  $total_lots,  false );
+    update_option( 'fpt_total_co2',   $total_co2,   false );
+    update_option( 'fpt_total_poids', $total_poids, false );
     $country_name = get_option( 'fpt_country_name', 'votre pays' );
     $site_name    = get_option( 'fpt_site_name', 'FerayPro' );
     ?>
@@ -3042,11 +3162,9 @@ function fpt_admin_page() {
         <h2>📋 Shortcodes disponibles</h2>
         <ul>
             <li><code>[fpt_dashboard]</code> — Dashboard global impact sur n'importe quelle page</li>
-            <li><code>[fpt_dashboard_finance]</code> — Dashboard financier (ventes, commissions, partenaires) — <em>Nouveau v1.9.0</em></li>
             <li><code>[fpt_lot id="241"]</code> — Fiche publique d'un lot spécifique</li>
             <li><code>[fpt_methodologie]</code> — Page méthodologie complète</li>
             <li><code>[fpt_acheteur id="XXX"]</code> — Dashboard d'un acheteur régulier (remplacer XXX par l'ID du post acheteur)</li>
-            <li><code>[fpt_partenaires]</code> — Grille publique des partenaires</li>
         </ul>
 
         <h2>🔄 Recalculer les stats</h2>
@@ -3054,6 +3172,21 @@ function fpt_admin_page() {
             <?php wp_nonce_field('fpt_recalc'); ?>
             <p>Utile si vous avez importé des annonces existantes.</p>
             <button type="submit" name="fpt_recalculate" class="button button-primary">Recalculer CO₂ depuis zéro</button>
+        </form>
+
+        <h2 style="margin-top:20px">🧹 Nettoyer les attributions partenaires</h2>
+        <form method="post">
+            <?php wp_nonce_field('fpt_recalc'); ?>
+            <p style="color:#b45309">
+                <strong>⚠️ À exécuter une fois</strong> si des fiches acheteurs ou des annonces sans poids
+                ont reçu un <code>_fpt_ref</code> par erreur (bug avant v1.9.0).<br>
+                Supprime le champ <code>_fpt_ref</code> sur toutes les fiches de la catégorie
+                <strong><?php echo esc_html( get_option('fpt_acheteurs_cat_slug','acheteurs') ); ?></strong>
+                et sur les lots avec poids = 0.
+            </p>
+            <button type="submit" name="fpt_cleanup_refs" class="button button-secondary" style="color:#b45309;border-color:#f0c040">
+                🧹 Nettoyer les _fpt_ref orphelins (partenaires)
+            </button>
         </form>
 
         <h2 style="margin-top:20px">🚛 Corriger le CO₂ transport</h2>
@@ -3120,6 +3253,10 @@ function fpt_attach_ref_to_listing( $post_id, $post, $update ) {
     if ( defined('DOING_AUTOSAVE') && DOING_AUTOSAVE ) return;
     if ( $post->post_status !== 'publish' ) return;
 
+    // Ne pas attribuer de ref aux fiches acheteurs
+    $acheteur_slugs = array_map( 'trim', explode( ',', get_option( 'fpt_acheteurs_cat_slug', 'acheteurs' ) ) );
+    if ( has_term( $acheteur_slugs, 'hp_listing_category', $post_id ) ) return;
+
     // Ne pas écraser si déjà défini
     $existing = get_post_meta( $post_id, '_fpt_ref', true );
     if ( $existing ) return;
@@ -3129,7 +3266,8 @@ function fpt_attach_ref_to_listing( $post_id, $post, $update ) {
 
     // Vérifier que le partenaire est toujours actif
     $partenaires = fpt_get_partenaires_list();
-    $slugs = array_column( $partenaires, 'slug' );
+    $actifs      = array_filter( $partenaires, fn($p) => ! empty( $p['actif'] ) );
+    $slugs       = array_column( $actifs, 'slug' );
     if ( ! in_array( $ref, $slugs, true ) ) return;
 
     update_post_meta( $post_id, '_fpt_ref', $ref );
@@ -3181,12 +3319,25 @@ function fpt_get_partenaire_by_slug( $slug ) {
 
 // ─── 5. Stats partenaire — nombre de lots, kg, CO₂ ───────────────────────────
 function fpt_get_stats_partenaire( $slug ) {
+    // Exclure les fiches acheteurs de la catégorie "acheteurs"/"buyers"
+    $acheteur_slugs = array_map( 'trim', explode( ',', get_option( 'fpt_acheteurs_cat_slug', 'acheteurs' ) ) );
+
     $lots = get_posts([
         'post_type'      => 'hp_listing',
         'post_status'    => 'publish',
         'numberposts'    => -1,
         'fields'         => 'ids',
-        'meta_query'     => [[ 'key' => '_fpt_ref', 'value' => sanitize_key($slug) ]],
+        'meta_query'     => [
+            'relation' => 'AND',
+            [ 'key' => '_fpt_ref',       'value' => sanitize_key( $slug ) ],
+            [ 'key' => fpt_key_poids(),  'value' => '0', 'compare' => '>', 'type' => 'NUMERIC' ],
+        ],
+        'tax_query' => [[
+            'taxonomy' => 'hp_listing_category',
+            'field'    => 'slug',
+            'terms'    => $acheteur_slugs,
+            'operator' => 'NOT IN',
+        ]],
     ]);
 
     $total_lots      = count( $lots );
@@ -3200,7 +3351,9 @@ function fpt_get_stats_partenaire( $slug ) {
         if ( get_post_meta( $id, '_fpt_collected', true ) == '1' ) $total_collected++;
     }
 
-    $clicks     = (int) get_option( 'fpt_clicks_' . sanitize_key($slug), 0 );
+    $clicks     = (int) get_option( 'fpt_clicks_' . sanitize_key( $slug ), 0 );
+    // Conversion : nb lots publiés / nb clics. Plafonné à 100% pour rester lisible.
+    // Un taux > 100% signale un problème de données (ex: cookies multi-devices).
     $conversion = $clicks > 0 ? round( ( $total_lots / $clicks ) * 100, 1 ) : 0;
 
     return [
