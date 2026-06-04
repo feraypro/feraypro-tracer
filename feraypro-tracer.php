@@ -2611,6 +2611,10 @@ add_action( 'wp_enqueue_scripts',    'fpt_enqueue_styles' );
 add_action( 'admin_enqueue_scripts', 'fpt_enqueue_styles' );
 function fpt_enqueue_styles() {
     wp_enqueue_style( 'feraypro-tracer', FPT_PLUGIN_URL . 'tracer.css', [], FPT_VERSION );
+    // CSS admin FerayPro — injecté uniquement sur les pages du plugin
+    if ( isset( $_GET['page'] ) && strpos( $_GET['page'], 'feraypro' ) === 0 ) {
+        wp_enqueue_style( 'fpt-admin', FPT_PLUGIN_URL . 'modules/admin/admin.css', [], FPT_VERSION );
+    }
 }
 
 // ─── Shortcode : Page Méthodologie ────────────────────────────────────────────
@@ -2942,275 +2946,405 @@ function fpt_admin_page() {
     $country_name = get_option( 'fpt_country_name', 'votre pays' );
     $site_name    = get_option( 'fpt_site_name', 'FerayPro' );
     ?>
-    <div class="wrap">
-        <h1>FerayPro Tracer — Dashboard</h1>
+    <div class="wrap fpt-admin-wrap">
 
-        <h2>⚙️ Paramètres</h2>
-        <form method="post" style="max-width:500px;background:#fff;padding:20px;border:1px solid #ddd;border-radius:8px;margin-bottom:30px;">
+    <!-- ── HEADER ──────────────────────────────────────────────────────────── -->
+    <div class="fpt-adm-header">
+        <div class="fpt-adm-header-left">
+            <div class="fpt-adm-logo">FP</div>
+            <div>
+                <h1 class="fpt-adm-title">FerayPro Tracer</h1>
+                <p class="fpt-adm-subtitle">v<?php echo FPT_VERSION; ?> · <?php echo esc_html($site_name); ?> · <?php echo esc_html($country_name); ?></p>
+            </div>
+        </div>
+        <div class="fpt-adm-kpis">
+            <div class="fpt-adm-kpi fpt-adm-kpi--dark">
+                <span class="fpt-adm-kpi-val"><?php echo number_format($total_lots); ?></span>
+                <span class="fpt-adm-kpi-lbl">Lots tracés</span>
+            </div>
+            <div class="fpt-adm-kpi fpt-adm-kpi--green">
+                <span class="fpt-adm-kpi-val"><?php echo number_format($total_co2,2); ?> t</span>
+                <span class="fpt-adm-kpi-lbl">CO₂ évité</span>
+            </div>
+            <div class="fpt-adm-kpi">
+                <span class="fpt-adm-kpi-val"><?php echo number_format($total_poids,0,'',''); ?> kg</span>
+                <span class="fpt-adm-kpi-lbl">Poids total</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── TABS ──────────────────────────────────────────────────────────────── -->
+    <div class="fpt-adm-tabs">
+        <button class="fpt-adm-tab active" onclick="fptTab('settings',this)">⚙️ Paramètres</button>
+        <button class="fpt-adm-tab" onclick="fptTab('tools',this)">🔧 Outils</button>
+        <button class="fpt-adm-tab" onclick="fptTab('shortcodes',this)">📋 Shortcodes</button>
+        <button class="fpt-adm-tab" onclick="fptTab('factors',this)">🌱 Facteurs CO₂</button>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         TAB : PARAMÈTRES
+    ══════════════════════════════════════════════════════════════════════ -->
+    <div id="fpt-tab-settings" class="fpt-adm-tabcontent" style="display:block">
+        <form method="post">
             <?php wp_nonce_field('fpt_settings'); ?>
-            <table class="form-table">
-                <tr>
-                    <th><label for="fpt_site_name">Nom de la plateforme / Platform name</label></th>
-                    <td><input type="text" id="fpt_site_name" name="fpt_site_name" value="<?php echo esc_attr($site_name); ?>" class="regular-text" placeholder="FerayPro"></td>
-                </tr>
-                <tr>
-                    <th><label for="fpt_country_name">Pays / Région · Country / Region</label></th>
-                    <td><input type="text" id="fpt_country_name" name="fpt_country_name" value="<?php echo esc_attr($country_name); ?>" class="regular-text" placeholder="ex: Maroc, Congo, France, USA..."></td>
-                </tr>
-                <tr>
-                    <th><label for="fpt_language">Langue interface front-end</label></th>
-                    <td>
-                        <select id="fpt_language" name="fpt_language">
-                            <option value=""  <?php selected( get_option('fpt_language',''), ''   ); ?>>🌐 Auto (détection par domaine)</option>
-                            <option value="fr" <?php selected( get_option('fpt_language',''), 'fr' ); ?>>🇫🇷 Français (forcé)</option>
-                            <option value="en" <?php selected( get_option('fpt_language',''), 'en' ); ?>>🇬🇧 English (forcé)</option>
-                            <option value="es" <?php selected( get_option('fpt_language',''), 'es' ); ?>>🇪🇸 Español (forcé)</option>
-                            <option value="pt" <?php selected( get_option('fpt_language',''), 'pt' ); ?>>🇵🇹 Português (forcé)</option>
-                        </select>
-                        <p class="description">
-                            Auto : <code>.fr / ma. / .cd</code> → FR · <code>feraypro.com / .us</code> → EN · <code>es.</code> → ES · <code>pt. / br.</code> → PT<br>
-                            L'admin WordPress est toujours en français, quel que soit ce réglage.
-                        </p>
-                    </td>
-                </tr>
-                <tr>
-                    <th><label for="fpt_invoice_language">Langue de la facture</label></th>
-                    <td>
-                        <select id="fpt_invoice_language" name="fpt_invoice_language">
-                            <option value="fr" <?php selected( get_option('fpt_invoice_language','fr'), 'fr' ); ?>>🇫🇷 Français</option>
-                            <option value="en" <?php selected( get_option('fpt_invoice_language','fr'), 'en' ); ?>>🇬🇧 English</option>
-                            <option value="es" <?php selected( get_option('fpt_invoice_language','fr'), 'es' ); ?>>🇪🇸 Español</option>
-                            <option value="pt" <?php selected( get_option('fpt_invoice_language','fr'), 'pt' ); ?>>🇵🇹 Português</option>
-                        </select>
-                        <p class="description">Langue du PDF facture envoyé à l'acheteur. N'affecte pas l'admin.</p>
-                    </td>
-                </tr>
-                <tr><td colspan="2"><hr><strong>🔧 Meta keys HivePress (Field Name dans l'attribut)</strong></td></tr>
-                <tr>
-                    <th><label for="fpt_key_poids">Poids / Weight field name</label></th>
-                    <td>
-                        <input type="text" id="fpt_key_poids" name="fpt_key_poids" value="<?php echo esc_attr( get_option('fpt_key_poids','poids') ); ?>" class="regular-text" placeholder="poids">
-                        <p class="description">🇫🇷 poids &nbsp;|&nbsp; 🇬🇧 weight</p>
-                    </td>
-                </tr>
-                <tr>
-                    <th><label for="fpt_weight_unit">Unité de poids / Weight unit</label></th>
-                    <td>
-                        <select id="fpt_weight_unit" name="fpt_weight_unit">
-                            <option value="kg" <?php selected( get_option('fpt_weight_unit','kg'), 'kg' ); ?>>kg (kilogrammes)</option>
-                            <option value="lb" <?php selected( get_option('fpt_weight_unit','kg'), 'lb' ); ?>>lb (livres / pounds)</option>
-                        </select>
-                        <p class="description">Si lb, le plugin convertit automatiquement en kg pour le calcul CO₂</p>
-                    </td>
-                </tr>
-                <tr>
-                    <th><label for="fpt_key_ville">Ville / City field name</label></th>
-                    <td>
-                        <input type="text" id="fpt_key_ville" name="fpt_key_ville" value="<?php echo esc_attr( get_option('fpt_key_ville','ville') ); ?>" class="regular-text" placeholder="ville">
-                        <p class="description">🇫🇷 ville &nbsp;|&nbsp; 🇬🇧 city</p>
-                    </td>
-                </tr>
-                <tr>
-                    <th><label for="fpt_key_whatsapp">Téléphone / Phone field name</label></th>
-                    <td>
-                        <input type="text" id="fpt_key_whatsapp" name="fpt_key_whatsapp" value="<?php echo esc_attr( get_option('fpt_key_whatsapp','whatsapp') ); ?>" class="regular-text" placeholder="whatsapp">
-                        <p class="description">🇫🇷 whatsapp &nbsp;|&nbsp; 🇬🇧 telephone</p>
-                    </td>
-                </tr>
-                <tr>
-                    <th><label for="fpt_prix_cat_slug"><?php _e('Prix du jour — Category slug'); ?></label></th>
-                    <td>
-                        <input type="text" id="fpt_prix_cat_slug" name="fpt_prix_cat_slug" value="<?php echo esc_attr( get_option('fpt_prix_cat_slug','prix') ); ?>" class="regular-text" placeholder="prix">
-                        <p class="description">🇫🇷 prix &nbsp;|&nbsp; 🇬🇧 price — <?php _e('HivePress → Listings → Categories → slug'); ?></p>
-                    </td>
-                </tr>
-                <tr>
-                    <th><label for="fpt_key_prix_jour">Prix/kg field name (Prix du jour)</label></th>
-                    <td>
-                        <input type="text" id="fpt_key_prix_jour" name="fpt_key_prix_jour" value="<?php echo esc_attr( get_option('fpt_key_prix_jour','prix') ); ?>" class="regular-text" placeholder="prix">
-                        <p class="description">🇫🇷 prix &nbsp;|&nbsp; 🇬🇧 kg: <strong>price</strong> · 🇺🇸 lb: <strong>price_2</strong></p>
-                    </td>
-                </tr>
-                <tr>
-                    <th><label for="fpt_acheteurs_cat_slug">Acheteurs réguliers — Category slug</label></th>
-                    <td>
-                        <input type="text" id="fpt_acheteurs_cat_slug" name="fpt_acheteurs_cat_slug" value="<?php echo esc_attr( get_option('fpt_acheteurs_cat_slug','acheteurs') ); ?>" class="regular-text" placeholder="acheteurs">
-                        <p class="description">🇫🇷 acheteurs &nbsp;|&nbsp; 🇬🇧 buyers</p>
-                    </td>
-                </tr>
-                    <td>
-                        <input type="text" id="fpt_key_buyersprice" name="fpt_key_buyersprice" value="<?php echo esc_attr( get_option('fpt_key_buyersprice','buyersprice') ); ?>" class="regular-text" placeholder="buyersprice">
-                        <p class="description">🇫🇷 laisser vide (description utilisée) &nbsp;|&nbsp; 🇬🇧 <strong>buyersprice</strong></p>
-                    </td>
-                </tr>
-                <tr>
-                    <th><label for="fpt_key_prix"><?php _e('Prix / Price field name'); ?></label></th>
-                    <td>
-                        <input type="text" id="fpt_key_prix" name="fpt_key_prix" value="<?php echo esc_attr( get_option('fpt_key_prix','prixvendeur') ); ?>" class="regular-text" placeholder="prixvendeur">
-                        <p class="description">🇫🇷 prixvendeur &nbsp;|&nbsp; 🇬🇧 pricebuyer</p>
-                    </td>
-                </tr>
-                <tr>
-                    <th><label for="fpt_prix_category_slug">Slug catégorie Prix du jour · Prices category slug</label></th>
-                    <td>
-                        <input type="text" id="fpt_prix_category_slug" name="fpt_prix_category_slug" value="<?php echo esc_attr( get_option('fpt_prix_category_slug','prix') ); ?>" class="regular-text" placeholder="prix">
-                        <p class="description">🇫🇷 prix &nbsp;|&nbsp; 🇬🇧 price</p>
-                    </td>
-                </tr>
-            </table>
 
-            <tr><td colspan="2"><hr><strong>📄 Facture & Commission</strong></td></tr>
-            <table class="form-table">
-                <tr>
-                    <th><label for="fpt_currency">Devise</label></th>
-                    <td>
+            <!-- Section : Site -->
+            <div class="fpt-adm-card">
+                <div class="fpt-adm-card-head">
+                    <span class="fpt-adm-card-icon">🏢</span>
+                    <div>
+                        <h2 class="fpt-adm-card-title">Identité du site</h2>
+                        <p class="fpt-adm-card-desc">Nom, pays et langue affichés sur les pages publiques</p>
+                    </div>
+                </div>
+                <div class="fpt-adm-fields">
+                    <div class="fpt-adm-field">
+                        <label for="fpt_site_name">Nom de la plateforme</label>
+                        <input type="text" id="fpt_site_name" name="fpt_site_name"
+                               value="<?php echo esc_attr($site_name); ?>" placeholder="FerayPro">
+                        <span class="fpt-adm-hint">Affiché dans les blocs inline et factures</span>
+                    </div>
+                    <div class="fpt-adm-field">
+                        <label for="fpt_country_name">Pays / Région</label>
+                        <input type="text" id="fpt_country_name" name="fpt_country_name"
+                               value="<?php echo esc_attr($country_name); ?>" placeholder="ex : Maroc, Congo, France, USA">
+                    </div>
+                    <div class="fpt-adm-field">
+                        <label for="fpt_language">Langue interface front-end</label>
+                        <select id="fpt_language" name="fpt_language">
+                            <option value=""   <?php selected(get_option('fpt_language',''),'');   ?>>🌐 Auto (détection par domaine)</option>
+                            <option value="fr" <?php selected(get_option('fpt_language',''),'fr'); ?>>🇫🇷 Français (forcé)</option>
+                            <option value="en" <?php selected(get_option('fpt_language',''),'en'); ?>>🇬🇧 English (forcé)</option>
+                            <option value="es" <?php selected(get_option('fpt_language',''),'es'); ?>>🇪🇸 Español (forcé)</option>
+                            <option value="pt" <?php selected(get_option('fpt_language',''),'pt'); ?>>🇵🇹 Português (forcé)</option>
+                        </select>
+                        <span class="fpt-adm-hint"><code>.fr/ma./.cd</code> → FR · <code>feraypro.com/.us</code> → EN · <code>es.</code> → ES</span>
+                    </div>
+                    <div class="fpt-adm-field">
+                        <label for="fpt_invoice_language">Langue de la facture PDF</label>
+                        <select id="fpt_invoice_language" name="fpt_invoice_language">
+                            <option value="fr" <?php selected(get_option('fpt_invoice_language','fr'),'fr'); ?>>🇫🇷 Français</option>
+                            <option value="en" <?php selected(get_option('fpt_invoice_language','fr'),'en'); ?>>🇬🇧 English</option>
+                            <option value="es" <?php selected(get_option('fpt_invoice_language','fr'),'es'); ?>>🇪🇸 Español</option>
+                            <option value="pt" <?php selected(get_option('fpt_invoice_language','fr'),'pt'); ?>>🇵🇹 Português</option>
+                        </select>
+                        <span class="fpt-adm-hint">N'affecte pas l'interface admin</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section : HivePress -->
+            <div class="fpt-adm-card">
+                <div class="fpt-adm-card-head">
+                    <span class="fpt-adm-card-icon">🔧</span>
+                    <div>
+                        <h2 class="fpt-adm-card-title">Meta keys HivePress</h2>
+                        <p class="fpt-adm-card-desc">Nom des champs dans l'attribut HivePress (Field Name)</p>
+                    </div>
+                </div>
+                <div class="fpt-adm-fields fpt-adm-fields--grid">
+                    <div class="fpt-adm-field">
+                        <label for="fpt_key_poids">Champ Poids</label>
+                        <input type="text" id="fpt_key_poids" name="fpt_key_poids"
+                               value="<?php echo esc_attr(get_option('fpt_key_poids','poids')); ?>" placeholder="poids">
+                        <span class="fpt-adm-hint">🇫🇷 poids · 🇬🇧 weight</span>
+                    </div>
+                    <div class="fpt-adm-field">
+                        <label for="fpt_weight_unit">Unité de poids</label>
+                        <select id="fpt_weight_unit" name="fpt_weight_unit">
+                            <option value="kg" <?php selected(get_option('fpt_weight_unit','kg'),'kg'); ?>>kg — kilogrammes</option>
+                            <option value="lb" <?php selected(get_option('fpt_weight_unit','kg'),'lb'); ?>>lb — livres (auto-converti en kg)</option>
+                        </select>
+                    </div>
+                    <div class="fpt-adm-field">
+                        <label for="fpt_key_ville">Champ Ville</label>
+                        <input type="text" id="fpt_key_ville" name="fpt_key_ville"
+                               value="<?php echo esc_attr(get_option('fpt_key_ville','ville')); ?>" placeholder="ville">
+                        <span class="fpt-adm-hint">🇫🇷 ville · 🇬🇧 city</span>
+                    </div>
+                    <div class="fpt-adm-field">
+                        <label for="fpt_key_whatsapp">Champ Téléphone</label>
+                        <input type="text" id="fpt_key_whatsapp" name="fpt_key_whatsapp"
+                               value="<?php echo esc_attr(get_option('fpt_key_whatsapp','whatsapp')); ?>" placeholder="whatsapp">
+                        <span class="fpt-adm-hint">🇫🇷 whatsapp · 🇬🇧 telephone</span>
+                    </div>
+                    <div class="fpt-adm-field">
+                        <label for="fpt_key_prix">Champ Prix vendeur</label>
+                        <input type="text" id="fpt_key_prix" name="fpt_key_prix"
+                               value="<?php echo esc_attr(get_option('fpt_key_prix','prixvendeur')); ?>" placeholder="prixvendeur">
+                        <span class="fpt-adm-hint">🇫🇷 prixvendeur · 🇬🇧 pricebuyer</span>
+                    </div>
+                    <div class="fpt-adm-field">
+                        <label for="fpt_key_prix_jour">Slug prix du jour</label>
+                        <input type="text" id="fpt_key_prix_jour" name="fpt_key_prix_jour"
+                               value="<?php echo esc_attr(get_option('fpt_key_prix_jour','prix')); ?>" placeholder="prix">
+                        <span class="fpt-adm-hint">🇫🇷 prix · 🇬🇧 price</span>
+                    </div>
+                    <div class="fpt-adm-field">
+                        <label for="fpt_key_buyersprice">Champ prix acheteur</label>
+                        <input type="text" id="fpt_key_buyersprice" name="fpt_key_buyersprice"
+                               value="<?php echo esc_attr(get_option('fpt_key_buyersprice','')); ?>" placeholder="prixacheteur">
+                    </div>
+                    <div class="fpt-adm-field">
+                        <label for="fpt_prix_cat_slug">Catégorie slug prix du jour</label>
+                        <input type="text" id="fpt_prix_cat_slug" name="fpt_prix_cat_slug"
+                               value="<?php echo esc_attr(get_option('fpt_prix_cat_slug','prix')); ?>" placeholder="prix">
+                        <span class="fpt-adm-hint">Slug de la catégorie HivePress contenant les prix</span>
+                    </div>
+                    <div class="fpt-adm-field">
+                        <label for="fpt_acheteurs_cat_slug">Catégorie slug acheteurs</label>
+                        <input type="text" id="fpt_acheteurs_cat_slug" name="fpt_acheteurs_cat_slug"
+                               value="<?php echo esc_attr(get_option('fpt_acheteurs_cat_slug','acheteurs')); ?>" placeholder="acheteurs">
+                        <span class="fpt-adm-hint">Supporte plusieurs slugs séparés par virgule : <code>acheteurs,buyers</code></span>
+                    </div>
+                    <div class="fpt-adm-field">
+                        <label for="fpt_prix_category_slug">Catégorie slug prix marché</label>
+                        <input type="text" id="fpt_prix_category_slug" name="fpt_prix_category_slug"
+                               value="<?php echo esc_attr(get_option('fpt_prix_category_slug','')); ?>" placeholder="prix-marche">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section : Facturation -->
+            <div class="fpt-adm-card">
+                <div class="fpt-adm-card-head">
+                    <span class="fpt-adm-card-icon">📄</span>
+                    <div>
+                        <h2 class="fpt-adm-card-title">Facturation & Commission</h2>
+                        <p class="fpt-adm-card-desc">Devise, TVA et coordonnées bancaires pour les factures PDF</p>
+                    </div>
+                </div>
+                <div class="fpt-adm-fields fpt-adm-fields--grid">
+                    <div class="fpt-adm-field">
+                        <label for="fpt_currency">Devise</label>
                         <select id="fpt_currency" name="fpt_currency">
                             <?php
                             $currencies = [
-                                'MAD' => 'MAD — Dirham marocain (Maroc)',
-                                'EUR' => 'EUR — Euro (France, UE)',
-                                'USD' => 'USD — Dollar américain (USA)',
-                                'CDF' => 'CDF — Franc congolais (RDC)',
-                                'XOF' => 'XOF — Franc CFA (Afrique de l\'Ouest)',
-                                'XAF' => 'XAF — Franc CFA (Afrique Centrale)',
-                                'GBP' => 'GBP — Livre sterling (UK)',
-                                'CAD' => 'CAD — Dollar canadien',
-                                'AUD' => 'AUD — Dollar australien',
-                                'CHF' => 'CHF — Franc suisse',
-                                'NGN' => 'NGN — Naira (Nigéria)',
-                                'GHS' => 'GHS — Cedi (Ghana)',
-                                'KES' => 'KES — Shilling kényan',
-                                'TZS' => 'TZS — Shilling tanzanien',
-                                'UGX' => 'UGX — Shilling ougandais',
-                                'ETB' => 'ETB — Birr éthiopien',
-                                'ZAR' => 'ZAR — Rand sud-africain',
-                                'EGP' => 'EGP — Livre égyptienne',
-                                'TND' => 'TND — Dinar tunisien',
-                                'DZD' => 'DZD — Dinar algérien',
-                                'MRU' => 'MRU — Ouguiya (Mauritanie)',
-                                'SLL' => 'SLL — Leone (Sierra Leone)',
-                                'GMD' => 'GMD — Dalasi (Gambie)',
-                                'GNF' => 'GNF — Franc guinéen',
-                                'BIF' => 'BIF — Franc burundais',
-                                'RWF' => 'RWF — Franc rwandais',
-                                'MZN' => 'MZN — Metical (Mozambique)',
-                                'AOA' => 'AOA — Kwanza (Angola)',
-                                'BRL' => 'BRL — Real (Brésil)',
-                                'MXN' => 'MXN — Peso mexicain',
-                                'COP' => 'COP — Peso colombien',
-                                'ARS' => 'ARS — Peso argentin',
-                                'INR' => 'INR — Roupie indienne',
-                                'PKR' => 'PKR — Roupie pakistanaise',
-                                'BDT' => 'BDT — Taka (Bangladesh)',
-                                'IDR' => 'IDR — Roupie indonésienne',
-                                'PHP' => 'PHP — Peso philippin',
-                                'VND' => 'VND — Dong (Vietnam)',
-                                'THB' => 'THB — Baht (Thaïlande)',
-                                'CNY' => 'CNY — Yuan (Chine)',
-                                'JPY' => 'JPY — Yen (Japon)',
-                                'KRW' => 'KRW — Won (Corée du Sud)',
-                                'SAR' => 'SAR — Riyal saoudien',
-                                'AED' => 'AED — Dirham UAE',
-                                'QAR' => 'QAR — Riyal qatari',
-                                'TRY' => 'TRY — Livre turque',
-                                'UAH' => 'UAH — Hryvnia (Ukraine)',
-                                'SEK' => 'SEK — Couronne suédoise',
-                                'NOK' => 'NOK — Couronne norvégienne',
-                                'DKK' => 'DKK — Couronne danoise',
-                                'PLN' => 'PLN — Zloty (Pologne)',
+                                'MAD'=>'MAD — Dirham marocain','EUR'=>'EUR — Euro','USD'=>'USD — Dollar US',
+                                'CDF'=>'CDF — Franc congolais','XOF'=>'XOF — Franc CFA Ouest','XAF'=>'XAF — Franc CFA Central',
+                                'GBP'=>'GBP — Livre sterling','CAD'=>'CAD — Dollar canadien','AUD'=>'AUD — Dollar australien',
+                                'CHF'=>'CHF — Franc suisse','NGN'=>'NGN — Naira','GHS'=>'GHS — Cedi','KES'=>'KES — Shilling kényan',
+                                'TZS'=>'TZS — Shilling tanzanien','ZAR'=>'ZAR — Rand','EGP'=>'EGP — Livre égyptienne',
+                                'TND'=>'TND — Dinar tunisien','DZD'=>'DZD — Dinar algérien','BRL'=>'BRL — Real',
+                                'MXN'=>'MXN — Peso mexicain','INR'=>'INR — Roupie','SAR'=>'SAR — Riyal saoudien',
+                                'AED'=>'AED — Dirham UAE','TRY'=>'TRY — Livre turque','CNY'=>'CNY — Yuan',
+                                'JPY'=>'JPY — Yen','KRW'=>'KRW — Won',
                             ];
-                            $current = fpt_get_currency();
+                            $cur = fpt_get_currency();
                             foreach ($currencies as $v => $l):
                             ?>
-                            <option value="<?php echo $v; ?>" <?php selected($current, $v); ?>><?php echo $l; ?></option>
+                            <option value="<?php echo $v; ?>" <?php selected($cur,$v); ?>><?php echo $l; ?></option>
                             <?php endforeach; ?>
                         </select>
-                        <p class="description">Choisissez la devise de ce site. Sauvegardez pour l'appliquer à toutes les factures.</p>
-                    </td>
-                </tr>
-                <tr>
-                    <th><label for="fpt_tva_rate">TVA (%)</label></th>
-                    <td>
-                        <input type="number" id="fpt_tva_rate" name="fpt_tva_rate" value="<?php echo esc_attr(get_option('fpt_tva_rate','0')); ?>" min="0" max="100" step="0.1" style="width:80px"> %
-                        <p class="description">0 = Exonéré · France : 20 · RDC : 16 · Maroc : 20</p>
-                    </td>
-                </tr>
-                <tr>
-                    <th><label for="fpt_rib_iban">IBAN / RIB</label></th>
-                    <td><input type="text" id="fpt_rib_iban" name="fpt_rib_iban" value="<?php echo esc_attr(get_option('fpt_rib_iban','')); ?>" class="regular-text" placeholder="MA64 0000 ..."></td>
-                </tr>
-                <tr>
-                    <th><label for="fpt_rib_whatsapp">WhatsApp / Mobile Money</label></th>
-                    <td><input type="text" id="fpt_rib_whatsapp" name="fpt_rib_whatsapp" value="<?php echo esc_attr(get_option('fpt_rib_whatsapp','')); ?>" class="regular-text" placeholder="+212 6XX XXX XXX"></td>
-                </tr>
-                <tr>
-                    <th><label for="fpt_adresse_facturation">Adresse facturation</label></th>
-                    <td><input type="text" id="fpt_adresse_facturation" name="fpt_adresse_facturation" value="<?php echo esc_attr(get_option('fpt_adresse_facturation','')); ?>" class="regular-text" placeholder="Casablanca, Maroc"></td>
-                </tr>
-            </table>
+                    </div>
+                    <div class="fpt-adm-field">
+                        <label for="fpt_tva_rate">TVA (%)</label>
+                        <div class="fpt-adm-input-row">
+                            <input type="number" id="fpt_tva_rate" name="fpt_tva_rate"
+                                   value="<?php echo esc_attr(get_option('fpt_tva_rate','0')); ?>"
+                                   min="0" max="100" step="0.1" style="width:90px"> <span>%</span>
+                        </div>
+                        <span class="fpt-adm-hint">0 = exonéré · France : 20 · RDC : 16 · Maroc : 20</span>
+                    </div>
+                    <div class="fpt-adm-field">
+                        <label for="fpt_rib_iban">IBAN / RIB</label>
+                        <input type="text" id="fpt_rib_iban" name="fpt_rib_iban"
+                               value="<?php echo esc_attr(get_option('fpt_rib_iban','')); ?>" placeholder="MA64 0000 ...">
+                    </div>
+                    <div class="fpt-adm-field">
+                        <label for="fpt_rib_whatsapp">WhatsApp / Mobile Money</label>
+                        <input type="text" id="fpt_rib_whatsapp" name="fpt_rib_whatsapp"
+                               value="<?php echo esc_attr(get_option('fpt_rib_whatsapp','')); ?>" placeholder="+212 6XX XXX XXX">
+                    </div>
+                    <div class="fpt-adm-field fpt-adm-field--full">
+                        <label for="fpt_adresse_facturation">Adresse de facturation</label>
+                        <input type="text" id="fpt_adresse_facturation" name="fpt_adresse_facturation"
+                               value="<?php echo esc_attr(get_option('fpt_adresse_facturation','')); ?>"
+                               placeholder="Casablanca, Maroc">
+                    </div>
+                </div>
+            </div>
 
-            <button type="submit" name="fpt_save_settings" class="button button-primary">Sauvegarder</button>
+            <div class="fpt-adm-save-bar">
+                <button type="submit" name="fpt_save_settings" class="fpt-adm-btn fpt-adm-btn--primary">
+                    💾 Sauvegarder les paramètres
+                </button>
+            </div>
         </form>
+    </div><!-- #fpt-tab-settings -->
 
-        <h2>📊 Stats actuelles</h2>
-        <table class="widefat" style="max-width:500px;margin-bottom:30px;">
-            <tr><th>Lots tracés</th><td><?php echo $total_lots; ?></td></tr>
-            <tr><th>Poids total</th><td><?php echo number_format($total_poids,0,'',''); ?> kg</td></tr>
-            <tr><th>CO₂ évité total</th><td><?php echo number_format($total_co2,3); ?> tonnes</td></tr>
-        </table>
+    <!-- ══════════════════════════════════════════════════════════════════════
+         TAB : OUTILS
+    ══════════════════════════════════════════════════════════════════════ -->
+    <div id="fpt-tab-tools" class="fpt-adm-tabcontent" style="display:none">
 
-        <h2>📋 Shortcodes disponibles</h2>
-        <ul>
-            <li><code>[fpt_dashboard]</code> — Dashboard global impact sur n'importe quelle page</li>
-            <li><code>[fpt_lot id="241"]</code> — Fiche publique d'un lot spécifique</li>
-            <li><code>[fpt_methodologie]</code> — Page méthodologie complète</li>
-            <li><code>[fpt_acheteur id="XXX"]</code> — Dashboard d'un acheteur régulier (remplacer XXX par l'ID du post acheteur)</li>
-        </ul>
+        <div class="fpt-adm-card">
+            <div class="fpt-adm-card-head">
+                <span class="fpt-adm-card-icon">🔄</span>
+                <div>
+                    <h2 class="fpt-adm-card-title">Recalculer les stats CO₂</h2>
+                    <p class="fpt-adm-card-desc">Utile après un import d'annonces ou une migration</p>
+                </div>
+            </div>
+            <div class="fpt-adm-fields">
+                <form method="post">
+                    <?php wp_nonce_field('fpt_recalc'); ?>
+                    <p style="color:#6b8070;font-size:13px;margin-bottom:12px">
+                        Recalcule le CO₂ évité de chaque lot depuis zéro en utilisant les facteurs ADEME/FEDEREC.
+                        Recalcule aussi les totaux globaux (lots, poids, CO₂).
+                    </p>
+                    <button type="submit" name="fpt_recalculate" class="fpt-adm-btn fpt-adm-btn--primary">
+                        🔄 Recalculer CO₂ depuis zéro
+                    </button>
+                </form>
+            </div>
+        </div>
 
-        <h2>🔄 Recalculer les stats</h2>
-        <form method="post">
-            <?php wp_nonce_field('fpt_recalc'); ?>
-            <p>Utile si vous avez importé des annonces existantes.</p>
-            <button type="submit" name="fpt_recalculate" class="button button-primary">Recalculer CO₂ depuis zéro</button>
-        </form>
+        <div class="fpt-adm-card">
+            <div class="fpt-adm-card-head">
+                <span class="fpt-adm-card-icon">🧹</span>
+                <div>
+                    <h2 class="fpt-adm-card-title">Nettoyer les attributions partenaires</h2>
+                    <p class="fpt-adm-card-desc">Corriger les <code>_fpt_ref</code> orphelins sur fiches acheteurs (bug avant v1.9.0)</p>
+                </div>
+            </div>
+            <div class="fpt-adm-fields">
+                <form method="post">
+                    <?php wp_nonce_field('fpt_recalc'); ?>
+                    <p style="color:#b45309;font-size:13px;margin-bottom:12px">
+                        Supprime le champ <code>_fpt_ref</code> sur toutes les fiches de la catégorie
+                        <strong><?php echo esc_html(get_option('fpt_acheteurs_cat_slug','acheteurs')); ?></strong>
+                        et sur les lots avec poids = 0. À exécuter <strong>une fois</strong> après la mise à jour v1.9.0.
+                    </p>
+                    <button type="submit" name="fpt_cleanup_refs" class="fpt-adm-btn fpt-adm-btn--warn">
+                        🧹 Nettoyer les _fpt_ref orphelins
+                    </button>
+                </form>
+            </div>
+        </div>
 
-        <h2 style="margin-top:20px">🧹 Nettoyer les attributions partenaires</h2>
-        <form method="post">
-            <?php wp_nonce_field('fpt_recalc'); ?>
-            <p style="color:#b45309">
-                <strong>⚠️ À exécuter une fois</strong> si des fiches acheteurs ou des annonces sans poids
-                ont reçu un <code>_fpt_ref</code> par erreur (bug avant v1.9.0).<br>
-                Supprime le champ <code>_fpt_ref</code> sur toutes les fiches de la catégorie
-                <strong><?php echo esc_html( get_option('fpt_acheteurs_cat_slug','acheteurs') ); ?></strong>
-                et sur les lots avec poids = 0.
-            </p>
-            <button type="submit" name="fpt_cleanup_refs" class="button button-secondary" style="color:#b45309;border-color:#f0c040">
-                🧹 Nettoyer les _fpt_ref orphelins (partenaires)
-            </button>
-        </form>
+        <div class="fpt-adm-card">
+            <div class="fpt-adm-card-head">
+                <span class="fpt-adm-card-icon">🚛</span>
+                <div>
+                    <h2 class="fpt-adm-card-title">Recalculer le CO₂ transport</h2>
+                    <p class="fpt-adm-card-desc">Correction bug avant v1.6.1 — à exécuter une seule fois</p>
+                </div>
+            </div>
+            <div class="fpt-adm-fields">
+                <form method="post">
+                    <?php wp_nonce_field('fpt_recalc'); ?>
+                    <p style="color:#6b8070;font-size:13px;margin-bottom:8px">
+                        Formule correcte : (Poids kg ÷ 1000) × <?php echo fpt_transport_distance_km(); ?> km × 0,062 = t CO₂<br>
+                        <strong>Exemple :</strong> 30 kg × 150 km → <strong>0,000279 t CO₂</strong>
+                    </p>
+                    <button type="submit" name="fpt_recalc_transport" class="fpt-adm-btn fpt-adm-btn--danger">
+                        🔧 Recalculer CO₂ transport
+                    </button>
+                </form>
+            </div>
+        </div>
 
-        <h2 style="margin-top:20px">🚛 Corriger le CO₂ transport</h2>
-        <form method="post">
-            <?php wp_nonce_field('fpt_recalc'); ?>
-            <p style="color:#c0392b"><strong>⚠️ À exécuter une fois</strong> si le CO₂ transport était erroné (bug avant v1.6.1).<br>
-            Formule correcte : (Poids kg ÷ 1000) × <?php echo fpt_transport_distance_km(); ?> km × 0,062 = t CO₂</p>
-            <p><strong>Exemple vérification :</strong> 30 kg × 150 km → 0,030 t × 150 × 0,062 = <strong>0,000279 t CO₂</strong></p>
-            <button type="submit" name="fpt_recalc_transport" class="button button-secondary" style="color:#c0392b;border-color:#c0392b">
-                🔧 Recalculer CO₂ transport (correction bug)
-            </button>
-        </form>
+    </div><!-- #fpt-tab-tools -->
 
-        <h2 style="margin-top:30px">🌱 Facteurs CO₂ utilisés (ADEME)</h2>
-        <table class="widefat" style="max-width:500px">
-            <thead><tr><th>Matière</th><th>t CO₂ évité / tonne recyclée</th></tr></thead>
-            <tbody>
-            <?php foreach ( fpt_co2_factors() as $mat => $val ): ?>
-                <?php if ($mat === 'default') continue; ?>
-                <tr><td><?php echo ucfirst($mat); ?></td><td><?php echo $val; ?></td></tr>
-            <?php endforeach; ?>
-            </tbody>
-        </table>
-    </div>
+    <!-- ══════════════════════════════════════════════════════════════════════
+         TAB : SHORTCODES
+    ══════════════════════════════════════════════════════════════════════ -->
+    <div id="fpt-tab-shortcodes" class="fpt-adm-tabcontent" style="display:none">
+        <div class="fpt-adm-card">
+            <div class="fpt-adm-card-head">
+                <span class="fpt-adm-card-icon">📋</span>
+                <div>
+                    <h2 class="fpt-adm-card-title">Shortcodes disponibles</h2>
+                    <p class="fpt-adm-card-desc">Coller dans n'importe quelle page WordPress</p>
+                </div>
+            </div>
+            <div class="fpt-adm-shortcodes">
+                <?php
+                $scs = [
+                    ['[fpt_dashboard]',                    '🌍', 'Dashboard impact environnemental global',   ''],
+                    ['[fpt_dashboard_finance]',            '💰', 'Dashboard financier — ventes, commissions, partenaires', 'new'],
+                    ['[fpt_lot id="241"]',                 '📦', 'Fiche publique d\'un lot (remplacer 241 par l\'ID)',    ''],
+                    ['[fpt_methodologie]',                 '📖', 'Page méthodologie complète (facteurs ADEME)', ''],
+                    ['[fpt_acheteur id="XXX"]',            '🏭', 'Dashboard d\'un acheteur régulier',          ''],
+                    ['[fpt_partenaires]',                  '🤝', 'Grille publique des partenaires',            ''],
+                ];
+                foreach ($scs as [$sc, $icon, $desc, $badge]):
+                ?>
+                <div class="fpt-adm-sc-row">
+                    <span class="fpt-adm-sc-icon"><?php echo $icon; ?></span>
+                    <div class="fpt-adm-sc-info">
+                        <code class="fpt-adm-sc-code"><?php echo esc_html($sc); ?></code>
+                        <span class="fpt-adm-sc-desc"><?php echo esc_html($desc); ?></span>
+                    </div>
+                    <?php if ($badge === 'new'): ?>
+                    <span class="fpt-adm-badge-new">NEW v1.9</span>
+                    <?php endif; ?>
+                    <button type="button" class="fpt-adm-btn fpt-adm-btn--copy"
+                            onclick="navigator.clipboard.writeText('<?php echo esc_js($sc); ?>');this.textContent='✅ Copié';setTimeout(()=>this.textContent='📋 Copier',1500)">
+                        📋 Copier
+                    </button>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    </div><!-- #fpt-tab-shortcodes -->
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         TAB : FACTEURS CO₂
+    ══════════════════════════════════════════════════════════════════════ -->
+    <div id="fpt-tab-factors" class="fpt-adm-tabcontent" style="display:none">
+        <div class="fpt-adm-card">
+            <div class="fpt-adm-card-head">
+                <span class="fpt-adm-card-icon">🌱</span>
+                <div>
+                    <h2 class="fpt-adm-card-title">Facteurs CO₂ utilisés (ADEME / FEDEREC)</h2>
+                    <p class="fpt-adm-card-desc">t CO₂ évité par tonne de matière recyclée — source : Base Carbone ADEME · ACV FEDEREC 2017</p>
+                </div>
+            </div>
+            <div class="fpt-adm-factors-grid">
+                <?php foreach ( fpt_co2_factors() as $mat => $val ):
+                    if ($mat === 'default') continue;
+                    $pct = min(100, round($val / 15 * 100));
+                ?>
+                <div class="fpt-adm-factor-row">
+                    <span class="fpt-adm-factor-name"><?php echo esc_html(ucfirst($mat)); ?></span>
+                    <div class="fpt-adm-factor-bar-wrap">
+                        <div class="fpt-adm-factor-bar" style="width:<?php echo $pct; ?>%"></div>
+                    </div>
+                    <span class="fpt-adm-factor-val"><?php echo $val; ?> t/t</span>
+                </div>
+                <?php endforeach; ?>
+                <div class="fpt-adm-factor-row fpt-adm-factor-row--default">
+                    <span class="fpt-adm-factor-name">Défaut (non reconnu)</span>
+                    <div class="fpt-adm-factor-bar-wrap">
+                        <div class="fpt-adm-factor-bar" style="width:3.3%;background:#6b8070"></div>
+                    </div>
+                    <span class="fpt-adm-factor-val"><?php echo fpt_co2_factors()['default']; ?> t/t</span>
+                </div>
+            </div>
+        </div>
+    </div><!-- #fpt-tab-factors -->
+
+    </div><!-- .fpt-admin-wrap -->
+
+    <script>
+    function fptTab(id, btn) {
+        document.querySelectorAll('.fpt-adm-tabcontent').forEach(t => t.style.display = 'none');
+        document.querySelectorAll('.fpt-adm-tab').forEach(t => t.classList.remove('active'));
+        document.getElementById('fpt-tab-' + id).style.display = 'block';
+        btn.classList.add('active');
+    }
+    // Activer l'onglet "Outils" si un message de succès lié aux outils est présent
+    document.addEventListener('DOMContentLoaded', function() {
+        var notices = document.querySelectorAll('.notice-success p');
+        notices.forEach(function(n) {
+            if (n.textContent.includes('recalcul') || n.textContent.includes('Nettoyage') || n.textContent.includes('transport')) {
+                fptTab('tools', document.querySelectorAll('.fpt-adm-tab')[1]);
+            }
+        });
+    });
+    </script>
     <?php
 }
 
