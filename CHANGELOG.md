@@ -5,6 +5,47 @@ Format: [Keep a Changelog](https://keepachangelog.com) · [Semantic Versioning](
 
 ---
 
+## [2.0.0] — 2026
+
+### Added
+- **Module Paiement Stripe** — `modules/stripe/stripe.php`
+  - Stripe Checkout Session (mode `payment`) — redirige l'acheteur vers une page de paiement sécurisée Stripe
+  - Bouton **"💳 Payer en ligne"** injecté dans la facture PDF/HTML après les modes de règlement manuels (IBAN, Mobile Money)
+  - Confirmation automatique du paiement via **webhook Stripe** (`checkout.session.completed`) — aucune intervention admin requise
+  - Vérification de signature HMAC-SHA256 native (sans SDK tiers) avec protection anti-replay (fenêtre 5 min)
+  - Calcul automatique du montant : commission 20% + TVA configurée
+  - Fallback devise : MAD et CDF non supportés par Stripe → conversion automatique en EUR
+  - Pré-remplissage email acheteur dans la Checkout Session si disponible (`_fpt_acheteur_email` ou `hp_email`)
+  - Statut Stripe visible dans la **metabox admin** du lot : Session ID, Payment Intent ID, date de confirmation
+  - **Bandeau mode TEST** dans la facture avec carte de test (4242 4242 4242 4242)
+  - Réglages dans FP Tracer → ⚙️ Paramètres : mode test/live, 4 clés API (pub + secret × 2), webhook secret, URL webhook à copier
+  - Log interne des paiements Stripe (`fpt_stripe_payment_log`)
+  - Architecture 100% modulaire — `do_action` hooks, zéro modification invasive du plugin principal
+
+- **Nouveaux meta keys WordPress**
+
+  | Meta key | Type | Description |
+  |----------|------|-------------|
+  | `_fpt_stripe_session_id` | string | ID Checkout Session Stripe |
+  | `_fpt_stripe_payment_intent` | string | ID Payment Intent confirmé |
+  | `_fpt_stripe_paid_at` | int (timestamp) | Date/heure confirmation webhook |
+
+- **Nouveaux hooks WordPress**
+
+  | Hook | Paramètres | Description |
+  |------|-----------|-------------|
+  | `fpt_admin_settings_extra_cards` | — | Injecte la carte Stripe dans les réglages admin |
+  | `fpt_invoice_payment_methods` | `$lot_id`, `$comm20_ttc` | Injecte le bouton Stripe dans la facture |
+  | `fpt_metabox_after_commission` | `$post_id` | Injecte le statut Stripe dans la metabox lot |
+
+### Changed
+- Version bump 1.9.0 → 2.0.0
+- `feraypro-tracer.php` : `require_once` du module Stripe au démarrage (ligne 20)
+- `feraypro-tracer.php` : 3 `do_action` ajoutés (metabox, réglages admin, facture)
+- README mis à jour : structure plugin, shortcodes, meta keys, installation, roadmap
+
+---
+
 ## [1.9.0] — 2026
 
 ### Added

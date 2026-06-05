@@ -23,7 +23,7 @@
  *  3. Dans les réglages FP Tracer → renseigner les clés Stripe
  *  4. Configurer le webhook Stripe → URL fournie dans les réglages
  *
- * Version : 1.0.0 — FerayPro Tracer v1.9.0+
+ * Version : 1.0.0 — FerayPro Tracer v2.0.0+
  * Licence : MIT
  */
 

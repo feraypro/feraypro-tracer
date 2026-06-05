@@ -2,10 +2,10 @@
 
 **Open-source waste batch traceability plugin for WordPress / HivePress**
 
-Automatically calculates CO₂ avoided, child health impact, commission invoicing, and financial reporting for every recycled waste batch. Built for [FerayPro Morocco](https://ma.feraypro.com), [FerayPro DRC](https://cd.feraypro.com), [FerayPro France](https://fr.feraypro.com), and [FerayPro USA](https://feraypro.com) — a circular waste marketplace operating globally.
+Automatically calculates CO₂ avoided, child health impact, commission invoicing, Stripe online payment, and financial reporting for every recycled waste batch. Built for [FerayPro Morocco](https://ma.feraypro.com), [FerayPro DRC](https://cd.feraypro.com), [FerayPro France](https://fr.feraypro.com), and [FerayPro USA](https://feraypro.com) — a circular waste marketplace operating globally.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.9.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.0.0-blue.svg)](CHANGELOG.md)
 [![UNICEF Venture Fund](https://img.shields.io/badge/UNICEF-Venture%20Fund%202026-00aeef.svg)](https://unicefinnovationfund.org)
 
 ---
@@ -17,14 +17,18 @@ feraypro-tracer/
 ├── feraypro-tracer.php          ← Plugin principal (CO₂, lots, factures, partenaires)
 ├── tracer.css                   ← Styles publics (blocs inline, lot card, dashboard CO₂)
 ├── modules/
-│   └── finance/
-│       ├── finance.php          ← Module dashboard financier [fpt_dashboard_finance]
-│       └── finance.css          ← Styles du dashboard financier
+│   ├── admin/
+│   │   └── admin.css            ← Styles du panneau d'administration
+│   ├── finance/
+│   │   ├── finance.php          ← Module dashboard financier [fpt_dashboard_finance]
+│   │   └── finance.css          ← Styles du dashboard financier
+│   └── stripe/
+│       └── stripe.php           ← Module paiement Stripe (NEW v2.0.0)
 ├── CHANGELOG.md
 └── README.md
 ```
 
-> **Architecture modulaire** : `feraypro-tracer.php` charge automatiquement tous les modules via `require_once` au démarrage. Ajouter un module = créer un dossier dans `modules/` et l'enregistrer dans le `require_once` du plugin principal.
+> **Architecture modulaire** : `feraypro-tracer.php` charge automatiquement tous les modules via `require_once` au démarrage. Ajouter un module = créer un dossier dans `modules/` et l'enregistrer dans le `require_once` du plugin principal. Les modules communiquent avec le plugin principal via des `do_action` hooks — aucune modification invasive du core.
 
 ---
 
@@ -49,8 +53,9 @@ When a seller publishes a waste listing on HivePress / ListingHive, the plugin a
 4. **Generates a QR code** linking to the public batch traceability page
 5. **Updates the live impact dashboard** with cumulative totals and net CO₂ balance
 6. **Generates a commission invoice** (PDF) when the batch is collected — 20% to FerayPro, 80% to vendor
-7. **Tracks marketing partner referrals** via `?ref=` cookie system
-8. **Reports financial KPIs** via the Finance Dashboard module
+7. **Accepts online payment** via Stripe Checkout — automatic confirmation via webhook
+8. **Tracks marketing partner referrals** via `?ref=` cookie system
+9. **Reports financial KPIs** via the Finance Dashboard module
 
 ---
 
@@ -59,7 +64,7 @@ When a seller publishes a waste listing on HivePress / ListingHive, the plugin a
 | Shortcode | Description |
 |-----------|-------------|
 | `[fpt_dashboard]` | Live global environmental impact dashboard |
-| `[fpt_dashboard_finance]` | **NEW v1.9.0** — Financial dashboard (sales, commissions, pipeline, partners) |
+| `[fpt_dashboard_finance]` | Financial dashboard (sales, commissions, pipeline, partners) |
 | `[fpt_lot id="241"]` | Public traceability page for a batch |
 | `[fpt_methodologie]` | Calculation methodology page |
 | `[fpt_acheteur id="XXX"]` | Buyer dashboard — CO₂ produced by recycling |
@@ -78,18 +83,9 @@ When a seller publishes a waste listing on HivePress / ListingHive, the plugin a
 [fpt_dashboard_finance period="365" lang="en"]   ← année en cours, anglais
 ```
 
-**Indicateurs affichés :**
-- KPIs : lots tracés, collectés, ventes totales, commission FerayPro TTC, commissions partenaires, vendeurs, commissions impayées, délai moyen de collecte
-- Pipeline visuel des lots (barres de progression par statut)
-- Graphique mensuel 12 mois (Chart.js)
-- Répartition des revenus : split dynamique FP / partenaires / vendeurs (20/10/80 avec partenaire, 20/80 sans)
-- Détail des lots avec commissions impayées (lien admin direct)
-- Top partenaires marketing (commissions payées vs à percevoir)
-- Top 10 acheteurs (volume, poids, CO₂)
-
 ---
 
-## 💰 Commission & Invoicing Module (v1.8.0+)
+## 💰 Commission & Invoicing Module
 
 When admin confirms a batch collection:
 
@@ -99,8 +95,53 @@ When admin confirms a batch collection:
    - FerayPro receives **20%** commission from buyer
    - If a marketing partner referred the vendor: **10%** goes to partner, **10%** stays FerayPro
 3. Admin clicks **"📄 Ouvrir / Imprimer la facture PDF"** — a full A4 invoice opens
-4. Invoice includes: lot details, price breakdown, TVA, payment instructions (IBAN + Mobile Money)
-5. Admin clicks **"💰 Marquer comme payée"** when payment is received
+4. Invoice includes: lot details, price breakdown, TVA, IBAN/Mobile Money **and Stripe payment button**
+5. Commission is confirmed automatically via Stripe webhook, or manually via **"💰 Marquer comme payée"**
+
+---
+
+## 💳 Stripe Payment Module (v2.0.0)
+
+### How it works
+
+1. Buyer opens the invoice link (shared by admin)
+2. Clicks **"💳 Payer [amount] en ligne"**
+3. Redirected to a Stripe-hosted Checkout page (card, Apple Pay, Google Pay…)
+4. On success → Stripe sends a webhook to the site
+5. Plugin automatically sets `_fpt_commission_paid = 'paid'` — no admin action needed
+
+### Setup (3 steps)
+
+**Step 1 — Enter your Stripe keys**  
+Go to FP Tracer → ⚙️ Paramètres → 💳 Stripe. Enter your test or live API keys.
+
+**Step 2 — Configure the webhook in Stripe Dashboard**
+```
+Stripe Dashboard → Developers → Webhooks → Add endpoint
+URL     : [copied from FP Tracer settings]
+Event   : checkout.session.completed
+```
+Copy the **Signing secret** (`whsec_...`) back into FP Tracer settings.
+
+**Step 3 — Switch to Live when ready**  
+Toggle Mode from `Test` → `Live` and enter your live keys.
+
+### Currency support
+
+Stripe does not support all currencies. The module handles this automatically:
+
+| Country | Site currency | Stripe currency |
+|---------|--------------|----------------|
+| Morocco 🇲🇦 | MAD | EUR (fallback) |
+| France 🇫🇷 | EUR | EUR |
+| USA 🇺🇸 | USD | USD |
+| DRC 🇨🇩 | CDF / USD | EUR / USD |
+
+### Test card
+```
+Card   : 4242 4242 4242 4242
+Expiry : 12/34   CVC : 123
+```
 
 ---
 
@@ -118,6 +159,7 @@ When admin confirms a batch collection:
 3. Create pages with shortcodes:
    - Environmental: `[fpt_dashboard]`
    - Financial: `[fpt_dashboard_finance]` *(protect with `manage_options` role)*
+4. *(Optional)* Configure Stripe for online payments (see above)
 
 ### Protect the finance page (recommended)
 
@@ -139,6 +181,9 @@ add_action('template_redirect', function() {
 | Currency | MAD | USD | USD | EUR |
 | TVA | 0% | 0% | 16% | 20% |
 | Weight unit | kg | lb | kg | kg |
+| Stripe currency | EUR* | USD | EUR* | EUR |
+
+*fallback — MAD/CDF not supported by Stripe
 
 ---
 
@@ -159,12 +204,25 @@ add_action('template_redirect', function() {
 | `_fpt_ref` | string | Slug partenaire référent |
 | `_fpt_co2_transport` | float | CO₂ transport (tonnes) |
 | `_fpt_co2_total` | float | CO₂ total (matière + transport) |
+| `_fpt_stripe_session_id` | string | ID Checkout Session Stripe |
+| `_fpt_stripe_payment_intent` | string | ID Payment Intent confirmé |
+| `_fpt_stripe_paid_at` | int | Timestamp confirmation webhook |
+
+---
+
+## 🔗 WordPress Hooks (extensibility)
+
+| Hook | Type | Paramètres | Description |
+|------|------|-----------|-------------|
+| `fpt_admin_settings_extra_cards` | action | — | Injecte des cartes dans les réglages admin |
+| `fpt_invoice_payment_methods` | action | `$lot_id`, `$comm20_ttc` | Injecte des modes de paiement dans la facture |
+| `fpt_metabox_after_commission` | action | `$post_id` | Injecte du contenu après le bloc commission dans la metabox |
 
 ---
 
 ## 🗺️ Roadmap
 
-### Phase 1 — MVP (Current — v1.9.0)
+### Phase 1 — MVP (Current — v2.0.0)
 - [x] CO₂ net gain engine (200+ materials, FR + EN + Darija/Lingala/Swahili NLP)
 - [x] CO₂ process factors for buyer dashboard (FEDEREC/ADEME LCA 2017)
 - [x] ERRI with population density multiplier
@@ -177,8 +235,9 @@ add_action('template_redirect', function() {
 - [x] Buyer dashboard (`[fpt_acheteur]`)
 - [x] Partner affiliate tracking — `?ref=` cookie, banner, admin dashboard
 - [x] Commission & invoicing module — 20% FP / 80% vendor / 10% partner, PDF A4
-- [x] **Financial dashboard** `[fpt_dashboard_finance]` — v1.9.0
+- [x] Financial dashboard `[fpt_dashboard_finance]`
 - [x] Architecture modulaire (`modules/`)
+- [x] **Stripe online payment** — Checkout Session + webhook auto-confirmation
 
 ### Phase 2 — ML Refinement (2026–2027)
 - [ ] Random Forest model (Morocco + DRC field data)
@@ -189,6 +248,7 @@ add_action('template_redirect', function() {
 - [ ] Export API for governments/NGOs
 - [ ] GitHub auto-update across all country sites
 - [ ] Transient cache for finance dashboard (large datasets)
+- [ ] Stripe multi-currency native (MAD via local acquirer)
 
 ---
 
@@ -215,7 +275,7 @@ MIT License — Copyright (c) 2026 FerayPro
 ## 🏷️ Citation
 
 ```
-FerayPro Tracer v1.9.0 (2026). Open-source waste batch traceability plugin.
+FerayPro Tracer v2.0.0 (2026). Open-source waste batch traceability plugin.
 MIT License. https://github.com/feraypro/feraypro-tracer
 ```
 

@@ -3,7 +3,7 @@
  * Plugin Name: FerayPro Tracer
  * Plugin URI: https://ma.feraypro.com/impact
  * Description: Traçabilité des lots de déchets recyclés avec calcul CO₂ évité et génération de QR code. Module open source pour UNICEF Venture Fund.
- * Version: 1.9.0
+ * Version: 2.0.0
  * Author: FerayPro
  * License: MIT
  * Text Domain: feraypro-tracer
@@ -11,7 +11,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'FPT_VERSION',    '1.9.0' );
+define( 'FPT_VERSION',    '2.0.0' );
 define( 'FPT_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FPT_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
