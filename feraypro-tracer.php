@@ -17,6 +17,7 @@ define( 'FPT_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
 // ─── Chargement des modules ────────────────────────────────────────────────────
 require_once FPT_PLUGIN_DIR . 'modules/finance/finance.php';
+require_once FPT_PLUGIN_DIR . 'modules/stripe/stripe.php';
 
 // ─── Normalisation texte multilingue ─────────────────────────────────────────
 // Supporte FR, EN + translittérations Darija, Lingala, Swahili de base
@@ -668,6 +669,7 @@ function fpt_collection_metabox_html( $post ) {
                     </button>
                     <span id="fpt_paid_msg_<?php echo $post->ID; ?>" style="font-size:12px;display:block;margin-top:4px"></span>
                 <?php endif; ?>
+                <?php do_action( 'fpt_metabox_after_commission', $post->ID ); ?>
             <?php else : ?>
                 <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
                     <input type="number" id="fpt_prix_input_<?php echo $post->ID; ?>" step="0.01" min="0"
@@ -3165,6 +3167,8 @@ function fpt_admin_page() {
                 </div>
             </div>
 
+            <?php do_action( 'fpt_admin_settings_extra_cards' ); ?>
+
             <div class="fpt-adm-save-bar">
                 <button type="submit" name="fpt_save_settings" class="fpt-adm-btn fpt-adm-btn--primary">
                     💾 Sauvegarder les paramètres
@@ -4212,6 +4216,8 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #111; 
         <?php if ($rib_iban) echo '🏦 IBAN : <strong>' . esc_html($rib_iban) . '</strong><br>'; ?>
         <?php if ($rib_wa)   echo '📱 ' . ( $ilang === 'en' ? 'Mobile payment' : ( $ilang === 'es' ? 'Pago móvil' : ( $ilang === 'pt' ? 'Pagamento móvel' : 'Paiement mobile' ) ) ) . ' : <strong>' . esc_html($rib_wa) . '</strong>'; ?>
     </div>
+
+    <?php do_action( 'fpt_invoice_payment_methods', $lot_id, $comm20_ttc ); ?>
 
     <!-- Footer -->
     <div class="inv-footer">
