@@ -77,7 +77,12 @@ function fpt_stripe_webhook_secret() {
  * Vérifie que le module Stripe est correctement configuré.
  */
 function fpt_stripe_is_configured() {
-    return ! empty( fpt_stripe_secret_key() ) && ! empty( fpt_stripe_public_key() );
+    $secret = fpt_stripe_secret_key();
+    $public = fpt_stripe_public_key();
+    // Valider que les clés ne sont pas inversées
+    if ( str_starts_with( $secret, 'pk_' ) ) return false;
+    if ( str_starts_with( $public, 'sk_' ) ) return false;
+    return ! empty( $secret ) && ! empty( $public );
 }
 
 /**
@@ -134,6 +139,10 @@ function fpt_stripe_admin_card() {
     $whsec         = get_option( 'fpt_stripe_webhook_secret', '' );
     $webhook_url   = fpt_stripe_webhook_url();
     $configured    = fpt_stripe_is_configured();
+
+    // Détecter clés inversées
+    $keys_inverted = ( str_starts_with($test_sec, 'pk_') || str_starts_with($test_pub, 'sk_')
+                    || str_starts_with($live_sec, 'pk_') || str_starts_with($live_pub, 'sk_') );
     ?>
     <div class="fpt-adm-card">
         <div class="fpt-adm-card-head">
@@ -142,7 +151,9 @@ function fpt_stripe_admin_card() {
                 <h2 class="fpt-adm-card-title">Stripe — Paiement en ligne</h2>
                 <p class="fpt-adm-card-desc">
                     Permet à l'acheteur de payer la commission (20%) directement depuis la facture.
-                    <?php if ( $configured ) : ?>
+                    <?php if ( $keys_inverted ) : ?>
+                        <strong style="color:#dc2626">🔴 Clés inversées — la clé secrète contient une clé publique (pk_...) ou vice versa. Corrigez ci-dessous.</strong>
+                    <?php elseif ( $configured ) : ?>
                         <strong style="color:#1a7a4a">✅ Configuré (mode <?php echo esc_html( strtoupper($mode) ); ?>)</strong>
                     <?php else : ?>
                         <strong style="color:#e67e22">⚠️ Non configuré — paiement manuel uniquement</strong>
