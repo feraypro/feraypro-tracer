@@ -667,20 +667,7 @@ function fpt_stripe_metabox_status( $post_id ) {
             </div>
             <?php endif; ?>
 
-            <!-- Lien facture à partager -->
-            <div style="margin-top:4px;border-top:1px solid #eee;padding-top:7px;display:flex;gap:5px">
-                <a href="<?php echo esc_url( $facture_url ); ?>" target="_blank"
-                   style="flex:1;text-align:center;background:#635bff;color:#fff;text-decoration:none;
-                          padding:6px 8px;border-radius:5px;font-size:11px;font-weight:600">
-                    📄 Ouvrir la facture
-                </a>
-                <button type="button"
-                        onclick="navigator.clipboard.writeText('<?php echo esc_js($facture_url); ?>');this.textContent='✅ Copié!';setTimeout(()=>this.textContent='🔗 Copier lien',2000)"
-                        style="flex:1;background:#f0f4ff;border:1px solid #635bff;color:#635bff;
-                               padding:6px 8px;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer">
-                    🔗 Copier lien
-                </button>
-            </div>
+
 
         </div>
     </div>
