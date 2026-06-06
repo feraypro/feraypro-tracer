@@ -468,7 +468,6 @@ function fpt_co2_process_factors() {
         'etain'      => 0.300,
         'tin'        => 0.300,
         'nickel'     => 0.500,
-        'aluminium'  => 0.360,
 
         // E-waste / Électronique (estimation ACV)
         'electronique' => 1.500,
@@ -1872,19 +1871,24 @@ function fpt_co2_factors() {
         // ════════════════════════════════════════════════════════════════
         // BATTERIES / BATTERIES
         // ════════════════════════════════════════════════════════════════
-        'batterie'         => 1.80,   // plomb-acide : plomb recyclé gain ~0,42 + acier
+        // Termes spécifiques EN PREMIER — avant le terme générique 'batterie'
+        // Sinon le foreach s'arrête sur 'batterie' (1.80) avant d'atteindre 'batterie plomb' (0.90)
+        'batterie lithium' => 4.00,   // Li, Co, Ni — gains élevés
+        'lithium battery'  => 4.00,
+        'batterie plomb'   => 0.90,   // gain net plomb ~0,42 × teneur ~50% + acier (FEDEREC)
+        'lead acid battery'=> 0.90,
+        'lead battery'     => 0.90,
+        'batterie voiture' => 0.90,   // plomb-acide voiture = même facteur
+        'car battery'      => 0.90,
+        'batterie acide'   => 0.90,
+        // Terme générique APRÈS les spécifiques
+        'batterie'         => 1.80,   // défaut batterie générique (plomb-acide standard)
         'battery'          => 1.80,
         'batteries'        => 1.80,
         'accumulateur'     => 1.80,
         'pile'             => 1.50,
-        'batterie lithium' => 4.00,   // Li, Co, Ni — gains élevés
-        'lithium battery'  => 4.00,
         'lithium'          => 4.00,
         'li-ion'           => 4.00,
-        'batterie plomb'   => 0.90,   // gain net plomb ~0,42 × teneur ~50% + acier
-        'lead battery'     => 0.90,
-        'car battery'      => 0.90,
-        'batterie voiture' => 0.90,
 
         // ════════════════════════════════════════════════════════════════
         // PAPIER & CARTON
@@ -2494,10 +2498,18 @@ function fpt_shortcode_dashboard( $atts ) {
                 <div class="fpt-impact-label"><?php echo fpt_t('CO₂ évité (recyclage)','CO₂ avoided (recycling)'); ?></div>
             </div>
             <?php
-            // CO₂ produit par le recyclage formel (matière recyclée + transport)
-            // Facteur recyclage : ~10% du CO₂ évité (estimation conservative)
-            // CO₂ transport = somme des transports de tous les lots collectés
-            $co2_recyclage_process = round($total_co2 * 0.10, 2);
+            // CO₂ produit par le recyclage formel — somme réelle des facteurs ADEME/FEDEREC
+            // Calcul : pour chaque lot, on applique fpt_calculate_process_co2(titre, poids)
+            // Conforme ADEME Base Carbone — remplace l'ancien forfait arbitraire de 10%
+            $co2_recyclage_process = 0.0;
+            foreach ( $all_ids as $lot_id ) {
+                $lot_titre = get_the_title( $lot_id );
+                $lot_poids = fpt_get_poids_kg( $lot_id );
+                if ( $lot_poids > 0 ) {
+                    $co2_recyclage_process += fpt_calculate_process_co2( $lot_titre, $lot_poids );
+                }
+            }
+            $co2_recyclage_process = round( $co2_recyclage_process, 2 );
             $co2_produit_total = $co2_recyclage_process;
             ?>
             <div class="fpt-impact-card" style="border-top:3px solid #e67e22">
