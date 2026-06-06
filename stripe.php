@@ -560,23 +560,129 @@ function fpt_stripe_invoice_button( $lot_id, $comm20_ttc ) {
  */
 add_action( 'fpt_metabox_after_commission', 'fpt_stripe_metabox_status', 10, 1 );
 function fpt_stripe_metabox_status( $post_id ) {
-    if ( ! fpt_stripe_is_configured() ) return;
+    if ( ! fpt_stripe_is_configured() ) {
+        // Stripe non configuré — afficher un lien vers les réglages
+        $settings_url = admin_url( 'admin.php?page=feraypro-tracer' );
+        ?>
+        <div style="margin-top:10px;background:#fff8f0;border:1px solid #e67e22;border-radius:6px;padding:9px 11px;font-size:11px;color:#7a4a1a">
+            <strong>💳 Stripe</strong> — Non configuré<br>
+            <a href="<?php echo esc_url($settings_url); ?>" style="color:#e67e22;font-weight:600">
+                ⚙️ Configurer les clés API →
+            </a>
+        </div>
+        <?php
+        return;
+    }
 
-    $session_id = get_post_meta( $post_id, '_fpt_stripe_session_id', true );
-    $intent_id  = get_post_meta( $post_id, '_fpt_stripe_payment_intent', true );
-    $paid_at    = get_post_meta( $post_id, '_fpt_stripe_paid_at', true );
+    $session_id  = get_post_meta( $post_id, '_fpt_stripe_session_id', true );
+    $intent_id   = get_post_meta( $post_id, '_fpt_stripe_payment_intent', true );
+    $paid_at     = get_post_meta( $post_id, '_fpt_stripe_paid_at', true );
+    $comm_paid   = get_post_meta( $post_id, '_fpt_commission_paid', true );
+    $mode        = get_option( 'fpt_stripe_mode', 'test' );
 
-    if ( ! $session_id ) return;
+    // Construire le lien de la facture (lien de paiement à partager)
+    $token        = fpt_invoice_token( $post_id );
+    $facture_url  = add_query_arg([
+        'action'  => 'fpt_facture',
+        'fpt_lot' => $post_id,
+        'fpt_tok' => $token,
+    ], admin_url('admin-ajax.php'));
+
+    // Lien Stripe Dashboard vers la session ou l'intent
+    $stripe_base    = $mode === 'live' ? 'https://dashboard.stripe.com' : 'https://dashboard.stripe.com/test';
+    $stripe_session_url = $session_id
+        ? $stripe_base . '/payments/' . $session_id
+        : $stripe_base . '/payments';
+    $stripe_intent_url  = $intent_id
+        ? $stripe_base . '/payments/' . $intent_id
+        : null;
+
+    // Statut visuel
+    if ( $comm_paid === 'paid' && $paid_at ) {
+        $status_bg     = '#e6f5ee';
+        $status_border = '#1a7a4a';
+        $status_color  = '#1a7a4a';
+        $status_icon   = '✅';
+        $status_label  = 'Paiement confirmé';
+        $status_sub    = 'Le ' . date_i18n( 'd/m/Y à H:i', $paid_at );
+    } elseif ( $session_id ) {
+        $status_bg     = '#fffbea';
+        $status_border = '#f59e0b';
+        $status_color  = '#92400e';
+        $status_icon   = '⏳';
+        $status_label  = 'En attente de paiement';
+        $status_sub    = 'Session créée — paiement non reçu';
+    } else {
+        $status_bg     = '#f0f4ff';
+        $status_border = '#635bff';
+        $status_color  = '#3730a3';
+        $status_icon   = '💳';
+        $status_label  = 'Prêt';
+        $status_sub    = 'Le bouton de paiement est actif sur la facture';
+    }
     ?>
-    <div style="margin-top:8px;background:#f0f4ff;border:1px solid #635bff;border-radius:4px;padding:7px 10px;font-size:11px">
-        <strong style="color:#635bff">💳 Stripe</strong><br>
-        Session : <code style="font-size:10px"><?php echo esc_html( $session_id ); ?></code><br>
-        <?php if ($intent_id) : ?>
-        Intent : <code style="font-size:10px"><?php echo esc_html( $intent_id ); ?></code><br>
-        <?php endif; ?>
-        <?php if ($paid_at) : ?>
-        Confirmé le : <?php echo esc_html( date_i18n('d/m/Y H:i', $paid_at) ); ?>
-        <?php endif; ?>
+
+    <div style="margin-top:10px;border:1.5px solid <?php echo $status_border; ?>;border-radius:7px;overflow:hidden;font-size:12px;font-family:sans-serif">
+
+        <!-- En-tête statut -->
+        <div style="background:<?php echo $status_bg; ?>;padding:8px 11px;display:flex;align-items:center;gap:7px;border-bottom:1px solid <?php echo $status_border; ?>">
+            <span style="font-size:15px"><?php echo $status_icon; ?></span>
+            <div>
+                <strong style="color:<?php echo $status_color; ?>;font-size:12px"><?php echo esc_html($status_label); ?></strong><br>
+                <span style="color:#666;font-size:10px"><?php echo esc_html($status_sub); ?></span>
+            </div>
+            <span style="margin-left:auto;font-size:9px;background:<?php echo $mode==='live'?'#1a7a4a':'#635bff'; ?>;color:#fff;padding:2px 6px;border-radius:3px;font-weight:700;text-transform:uppercase">
+                <?php echo $mode === 'live' ? 'LIVE' : 'TEST'; ?>
+            </span>
+        </div>
+
+        <!-- Corps -->
+        <div style="padding:9px 11px;background:#fff;display:flex;flex-direction:column;gap:6px">
+
+            <?php if ( $session_id ) : ?>
+            <!-- Session ID -->
+            <div style="display:flex;align-items:center;gap:5px">
+                <span style="color:#888;font-size:10px;min-width:52px">Session</span>
+                <code style="font-size:9px;background:#f4f4f8;padding:2px 5px;border-radius:3px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                    <?php echo esc_html( $session_id ); ?>
+                </code>
+                <?php if ( $stripe_session_url ) : ?>
+                <a href="<?php echo esc_url($stripe_session_url); ?>" target="_blank"
+                   style="color:#635bff;font-size:10px;text-decoration:none;white-space:nowrap" title="Voir dans Stripe">↗</a>
+                <?php endif; ?>
+            </div>
+            <?php endif; ?>
+
+            <?php if ( $intent_id ) : ?>
+            <!-- Payment Intent -->
+            <div style="display:flex;align-items:center;gap:5px">
+                <span style="color:#888;font-size:10px;min-width:52px">Intent</span>
+                <code style="font-size:9px;background:#f4f4f8;padding:2px 5px;border-radius:3px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                    <?php echo esc_html( $intent_id ); ?>
+                </code>
+                <?php if ( $stripe_intent_url ) : ?>
+                <a href="<?php echo esc_url($stripe_intent_url); ?>" target="_blank"
+                   style="color:#635bff;font-size:10px;text-decoration:none;white-space:nowrap" title="Voir dans Stripe">↗</a>
+                <?php endif; ?>
+            </div>
+            <?php endif; ?>
+
+            <!-- Lien facture à partager -->
+            <div style="margin-top:4px;border-top:1px solid #eee;padding-top:7px;display:flex;gap:5px">
+                <a href="<?php echo esc_url( $facture_url ); ?>" target="_blank"
+                   style="flex:1;text-align:center;background:#635bff;color:#fff;text-decoration:none;
+                          padding:6px 8px;border-radius:5px;font-size:11px;font-weight:600">
+                    📄 Ouvrir la facture
+                </a>
+                <button type="button"
+                        onclick="navigator.clipboard.writeText('<?php echo esc_js($facture_url); ?>');this.textContent='✅ Copié!';setTimeout(()=>this.textContent='🔗 Copier lien',2000)"
+                        style="flex:1;background:#f0f4ff;border:1px solid #635bff;color:#635bff;
+                               padding:6px 8px;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer">
+                    🔗 Copier lien
+                </button>
+            </div>
+
+        </div>
     </div>
     <?php
 }
