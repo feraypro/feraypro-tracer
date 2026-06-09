@@ -1,7 +1,7 @@
 # FerayPro Tracer — Calculation Methodology
 
 **Last updated:** 2026  
-**Version:** 1.7.3  
+**Version:** 2.1.0  
 **License:** MIT  
 
 ---
@@ -23,11 +23,12 @@ Source: FEDEREC/ADEME ACV 2017. This is the scientifically rigorous approach val
 1. [Input Data](#1-input-data)
 2. [Material Detection](#2-material-detection)
 3. [Section 1 — CO₂ Impact](#3-section-1--co₂-impact)
-4. [Section 2 — Child Health Impact (ERRI)](#4-section-2--child-health-impact-erri)
-5. [Dashboard Equivalents](#5-dashboard-equivalents)
-6. [Limitations & Validation Status](#6-limitations--validation-status)
-7. [Phase 2 — ML Refinement](#7-phase-2--ml-refinement)
-8. [All Sources](#8-all-sources)
+4. [Section 1b — CO₂ Process Adjustment (Grid Intensity)](#4-section-1b--co₂-process-adjustment-grid-intensity)
+5. [Section 2 — Child Health Impact (ERRI)](#5-section-2--child-health-impact-erri)
+6. [Dashboard Equivalents](#6-dashboard-equivalents)
+7. [Limitations & Validation Status](#7-limitations--validation-status)
+8. [Phase 2 — ML Refinement](#8-phase-2--ml-refinement)
+9. [All Sources](#9-all-sources)
 
 ---
 
@@ -128,8 +129,8 @@ CO₂ net gain (t) = Weight (kg) ÷ 1000 × Net gain factor (t CO₂ / t recycle
 
 The buyer dashboard shows CO₂ **produced** by the recycler (the recycling process itself):
 
-| Material | CO₂ process (t/t) | Source |
-|----------|------------------|--------|
+| Material | CO₂ process base (t/t) | Source |
+|----------|----------------------|--------|
 | Copper | 1.304 | FEDEREC/ADEME ACV 2017 |
 | Aluminum | 0.36 | ADEME Base Carbone |
 | Steel/Scrap | 1.10 | Electric arc furnace — ADEME |
@@ -137,9 +138,62 @@ The buyer dashboard shows CO₂ **produced** by the recycler (the recycling proc
 | PET Plastic | 0.65 | ADEME 2024 |
 | Glass | 0.29 | ADEME Base Carbone |
 
+> These base factors are calibrated on the **French electricity mix** (45 g CO₂/kWh, nuclear-dominant — RTE 2023). They are adjusted per country using the grid intensity multiplier (Section 1b below).
+
 ---
 
-## 4. Section 2 — Child Health Impact (ERRI)
+## 4. Section 1b — CO₂ Process Adjustment (Grid Intensity)
+
+### Why it matters
+
+The CO₂ produced by recycling a tonne of aluminum depends heavily on the electricity mix of the country where recycling occurs. Smelting aluminum consumes large amounts of electricity — in France (nuclear, 45 g CO₂/kWh) that process is nearly carbon-free; in Morocco (coal + gas, 644 g CO₂/kWh) it is 14× more carbon-intensive.
+
+### What is adjusted and what is not
+
+| Indicator | Adjusted by grid? | Rationale |
+|-----------|------------------|-----------|
+| **CO₂ net gain** (avoided, public dashboard) | ❌ No | Universal — ADEME/FEDEREC primary vs recycled, physics doesn't change by country |
+| **CO₂ process** (produced, buyer dashboard) | ✅ Yes | Depends on local electricity carbon intensity |
+
+### Formula
+
+```
+CO₂ process adjusted (t/t) = CO₂ process base (ADEME) × grid_multiplier
+
+grid_multiplier = local_grid_intensity (g CO₂/kWh) ÷ 45 (France reference)
+```
+
+### Grid Intensity Table
+
+| Country | Grid intensity | Multiplier | Source |
+|---------|---------------|------------|--------|
+| 🇫🇷 France | 45 g CO₂/kWh | ×1.00 | RTE 2023 — nuclear dominant |
+| 🇺🇸 USA | 380 g CO₂/kWh | ×8.44 | EPA eGRID 2023 — national average |
+| 🇲🇦 Morocco | 644 g CO₂/kWh | ×14.3 | ONEE/MASEN 2024 — coal + gas |
+| 🇨🇩 DRC | 35 g CO₂/kWh | ×0.78 | SNE 2023 — Inga hydropower |
+| 🇸🇳 Senegal | 500 g CO₂/kWh | ×11.1 | SENELEC 2023 — fuel + gas |
+| 🇰🇪 Kenya | 120 g CO₂/kWh | ×2.67 | KPLC 2023 — geothermal + hydro |
+| 🇬🇧 UK | 170 g CO₂/kWh | ×3.78 | National Grid 2023 — wind + gas |
+| 🇩🇪 Germany | 350 g CO₂/kWh | ×7.78 | UBA 2023 — coal + renewables |
+
+### Worked example — 35 kg Copper, Morocco
+
+**CO₂ net gain (avoided)** — unchanged, universal:
+- 0.035 t × 0.141 (ADEME net factor) = **0.00494 t = 4.94 kg CO₂ avoided**
+
+**CO₂ process (produced by recycler)** — adjusted to Moroccan grid:
+- Base factor (France ref): 1.304 t CO₂/t
+- Grid multiplier Morocco: ×14.3 (644 g/kWh ÷ 45 g/kWh)
+- Adjusted factor: 1.304 × 14.3 = **18.65 t CO₂/t**
+- For 35 kg: 0.035 × 18.65 = **0.653 t CO₂ produced**
+
+This reflects the reality that recycling copper in Morocco, where the grid is predominantly coal-fired, is significantly more carbon-intensive than in France or the DRC.
+
+> **Scientific status:** Grid intensity values are country-level averages from IEA and national TSO reports. Sub-national and site-level variation is not captured. The adjustment is proportional and conservative. Phase 2 will refine this with actual energy consumption data from recycling facilities.
+
+---
+
+## 5. Section 2 — Child Health Impact (ERRI)
 
 ### ERRI — Exposure Risk Reduction Index
 
@@ -173,7 +227,7 @@ ERRI = ((Lead diverted kg × 50) + (PM2.5 diverted kg × 10)) × density_multipl
 
 ---
 
-## 5. Dashboard Equivalents
+## 6. Dashboard Equivalents
 
 | Indicator | Formula | Source |
 |-----------|---------|--------|
@@ -181,7 +235,7 @@ ERRI = ((Lead diverted kg × 50) + (PM2.5 diverted kg × 10)) × density_multipl
 
 ---
 
-## 6. Limitations & Validation Status
+## 7. Limitations & Validation Status
 
 - Estimates based on global average emission factors
 - Net gain factors assume average purity and typical recycling processes
@@ -190,7 +244,7 @@ ERRI = ((Lead diverted kg × 50) + (PM2.5 diverted kg × 10)) × density_multipl
 
 ---
 
-## 7. Phase 2 — ML Refinement
+## 8. Phase 2 — ML Refinement
 
 - Random Forest model trained on Morocco + DRC field data
 - Geospatial health model (distance-decay, population density)
@@ -200,13 +254,18 @@ ERRI = ((Lead diverted kg × 50) + (PM2.5 diverted kg × 10)) × density_multipl
 
 ---
 
-## 8. All Sources
+## 9. All Sources
 
 | Source | Reference | Used for |
 |--------|-----------|----------|
 | ADEME Base Carbone | basecarbone.ademe.fr | CO₂ net gain factors |
 | FEDEREC/ADEME ACV 2017 | federec.com | Steel, copper, paper net gains |
 | ADEME 2024 | ademe.fr | Plastic recycling factors |
+| **EPA WARM v16 (2024)** | epa.gov/warm | US recycling factors — cross-validation |
+| **IEA Electricity (2024)** | iea.org | National grid carbon intensity — CO₂ process adjustment |
+| **EPA eGRID (2023)** | epa.gov/egrid | US electricity grid mix — 380 g CO₂/kWh |
+| **ONEE/MASEN (2024)** | masen.ma | Morocco electricity mix — 644 g CO₂/kWh |
+| **RTE (2023)** | rte-france.com | France electricity mix — 45 g CO₂/kWh (reference) |
 | IPCC AR6 (2022) | ipcc.ch/ar6 | Cross-validation |
 | FAO (2021) | fao.org | Trees/year equivalent |
 | WHO / OMS (2021) | who.int/data/gho | Lead exposure, ERRI coefficient |
@@ -219,4 +278,4 @@ ERRI = ((Lead diverted kg × 50) + (PM2.5 diverted kg × 10)) × density_multipl
 
 ---
 
-*FerayPro Tracer v1.7.3 — Open Source MIT *
+*FerayPro Tracer v2.1.0 — Open Source MIT*

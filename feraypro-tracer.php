@@ -126,8 +126,7 @@ function fpt_strings() {
         'waste_to_recycle'    => ['fr'=>'Déchets à recycler',      'en'=>'Waste to recycle',        'es'=>'Residuos a reciclar',    'pt'=>'Resíduos a reciclar'],
         'co2_avoided'         => ['fr'=>'CO₂ évité (recyclage)',   'en'=>'CO₂ avoided (recycling)', 'es'=>'CO₂ evitado (reciclaje)','pt'=>'CO₂ evitado (reciclagem)'],
         'co2_produced'        => ['fr'=>'CO₂ produit (recyclage)', 'en'=>'CO₂ produced (recycling)','es'=>'CO₂ producido (reciclaje)','pt'=>'CO₂ produzido (reciclagem)'],
-        'net_co2'             => ['fr'=>'Bilan net CO₂',           'en'=>'Net CO₂ balance',         'es'=>'Balance neto de CO₂',    'pt'=>'Balanço líquido de CO₂'],
-        'avoided_minus'       => ['fr'=>'évité − produit',         'en'=>'avoided − produced',      'es'=>'evitado − producido',    'pt'=>'evitado − produzido'],
+        'net_co2'             => ['fr'=>'',  'en'=>'',  'es'=>'',  'pt'=>''],  // supprimé v2.1.1
         'co2_avoided_short'   => ['fr'=>'évité',                   'en'=>'avoided',                 'es'=>'evitado',                'pt'=>'evitado'],
         'recycling'           => ['fr'=>'recyclage',               'en'=>'recycling',               'es'=>'reciclaje',              'pt'=>'reciclagem'],
         'weight_to_collect'   => ['fr'=>'Poids à collecter',       'en'=>'Weight to collect',       'es'=>'Peso a recoger',         'pt'=>'Peso a coletar'],
@@ -418,6 +417,112 @@ function fpt_transport_distance_km() {
     return 150; // défaut
 }
 
+// ─── Intensité carbone du réseau électrique par pays (g CO₂/kWh) ────────────
+// Source : IEA Electricity 2024, MASEN/ONEE 2024, eGRID USA 2023, RTE 2023
+// Utilisé pour ajuster le facteur CO₂ process selon le mix énergétique local.
+// Le gain net (fpt_co2_factors) reste ADEME/FEDEREC — seul le CO₂ process varie.
+//
+// Référence normalisée : France = 1.0 (mix bas-carbone nucléaire, ~45 g CO₂/kWh)
+// Les facteurs process dans fpt_co2_process_factors() sont calibrés sur France.
+// Le multiplicateur ajuste à la hausse pour les pays plus carbonés.
+//
+// Valeurs gCO₂/kWh → multiplicateur (divisé par référence France 45 g/kWh) :
+//   France  :  45 g/kWh → × 1.00  (nucléaire dominant — RTE 2023)
+//   USA     : 380 g/kWh → × 8.44  (mix national — EPA eGRID 2023)
+//   Maroc   : 644 g/kWh → × 14.3  (charbon + gaz dominant — ONEE/MASEN 2024)
+//   RDC     :  35 g/kWh → × 0.78  (hydroélectrique Inga dominant)
+//   Sénégal : 500 g/kWh → × 11.1
+//   Kenya   : 120 g/kWh → × 2.67  (géothermie + hydraulique)
+//
+// ⚠️ Le multiplicateur ne s'applique QU'au CO₂ process (dashboard acheteur).
+//    Le CO₂ évité (gain net, dashboard public) reste identique pour tous les pays :
+//    la physique du recyclage ne change pas, seule l'énergie locale varie.
+function fpt_grid_intensity() {
+    $country = strtolower( get_option( 'fpt_country_name', '' ) );
+
+    // Table : [g CO₂/kWh, source]
+    $grid = [
+        // ─ Afrique du Nord ────────────────────────────────────────────────
+        'maroc'      => 644,  // ONEE/MASEN 2024 — charbon + gaz (éolien en forte hausse)
+        'morocco'    => 644,
+        'algerie'    => 580,  // mix gaz naturel dominant — AIE 2023
+        'algérie'    => 580,
+        'tunisie'    => 430,  // gaz + renouvelables montants — STEG 2023
+        'tunisia'    => 430,
+        'egypte'     => 460,  // gaz + Assouane — IEA 2023
+        'egypt'      => 460,
+        // ─ Afrique subsaharienne ──────────────────────────────────────────
+        'congo'      =>  35,  // hydroélectrique Inga — SNE/RDC 2023
+        'rdc'        =>  35,
+        'drc'        =>  35,
+        'senegal'    => 500,  // fuel + gaz — SENELEC 2023
+        'sénégal'    => 500,
+        'kenya'      => 120,  // géothermie + hydraulique — KPLC 2023
+        'nigeria'    => 440,  // gaz naturel + fuel — NERC 2023
+        'ghana'      => 280,  // hydraulique + gaz — ECG 2023
+        'afrique du sud' => 760,  // charbon dominant — Eskom 2023
+        'south africa'   => 760,
+        'ethiopia'   =>  20,  // hydroélectrique — EEP 2023
+        'ethiopie'   =>  20,
+        'éthiopie'   =>  20,
+        'cameroun'   => 110,  // hydroélectrique — AES-Sonel 2023
+        'cameroon'   => 110,
+        'cote ivoire'=> 390,  // gaz + fuel — CIE 2023
+        "côte d'ivoire" => 390,
+        // ─ Europe ─────────────────────────────────────────────────────────
+        'france'     =>  45,  // nucléaire dominant — RTE 2023
+        'allemagne'  => 350,  // charbon + renouvelables — UBA 2023
+        'germany'    => 350,
+        'espagne'    => 160,  // renouvelables + nucléaire — REE 2023
+        'spain'      => 160,
+        'royaume-uni'=> 170,  // éolien + gaz — National Grid 2023
+        'uk'         => 170,
+        // ─ Amériques ──────────────────────────────────────────────────────
+        'usa'        => 380,  // mix national — EPA eGRID 2023
+        'états-unis' => 380,
+        'etats-unis' => 380,
+        'canada'     => 130,  // hydraulique dominant — NEB 2023
+        'bresil'     => 100,  // hydraulique — ONS 2023
+        'brésil'     => 100,
+        'brazil'     => 100,
+        'mexique'    => 350,  // gaz + pétrole — CFE 2023
+        'mexico'     => 350,
+        // ─ Asie ───────────────────────────────────────────────────────────
+        'chine'      => 560,  // charbon dominant — NEA 2023
+        'china'      => 560,
+        'inde'       => 630,  // charbon majoritaire — CEA 2023
+        'india'      => 630,
+    ];
+
+    // Intensité de référence : France = 45 g CO₂/kWh (base des facteurs ADEME)
+    $reference_gco2 = 45.0;
+
+    // Détection du pays dans la table
+    $intensity = null;
+    foreach ( $grid as $key => $val ) {
+        if ( strpos( $country, $key ) !== false ) {
+            $intensity = $val;
+            break;
+        }
+    }
+
+    // Option admin de surcharge manuelle (en g CO₂/kWh)
+    $manual = floatval( get_option( 'fpt_grid_intensity_override', 0 ) );
+    if ( $manual > 0 ) $intensity = $manual;
+
+    // Défaut : 380 g/kWh (moyenne mondiale IEA 2023) si pays non reconnu
+    if ( ! $intensity ) $intensity = 380;
+
+    $multiplier = round( $intensity / $reference_gco2, 4 );
+
+    return [
+        'gco2_per_kwh' => $intensity,
+        'multiplier'   => $multiplier,
+        'country'      => $country,
+        'source'       => 'IEA 2024 / ADEME ref France 45 gCO₂/kWh',
+    ];
+}
+
 // ─── Calcul CO₂ transport (ADEME fret routier : 0.062 kg CO₂/t·km) ───────────
 // Formule : (poids_kg ÷ 1000) × distance_km × 0.062 = t CO₂
 // Ex: 30 kg × 150 km → 0.030 t × 150 × 0.062 = 0.000279 t CO₂
@@ -511,6 +616,19 @@ function fpt_co2_process_factors() {
 }
 
 // ─── Calcul CO₂ produit par le process de recyclage ──────────────────────────
+// Les facteurs de fpt_co2_process_factors() sont calibrés sur le mix électrique
+// français (ADEME/FEDEREC, référence 45 g CO₂/kWh).
+// fpt_grid_intensity() retourne un multiplicateur qui ajuste ces facteurs au
+// mix électrique réel du pays configuré.
+//
+// Exemples :
+//   Aluminium — France  : 0,360 × 1,00 = 0,360 t CO₂/t  (nucléaire)
+//   Aluminium — Maroc   : 0,360 × 14,3 = 5,15  t CO₂/t  (charbon/gaz)
+//   Aluminium — USA     : 0,360 × 8,44 = 3,04  t CO₂/t  (mix national eGRID)
+//   Aluminium — RDC     : 0,360 × 0,78 = 0,281 t CO₂/t  (hydraulique Inga)
+//
+// Note : le CO₂ évité (gain net, dashboard public) n'est PAS modifié — il reste
+// ADEME/FEDEREC universel. Seul le CO₂ process (dashboard acheteur) est local.
 function fpt_calculate_process_co2( $titre, $poids_kg ) {
     $factors     = fpt_co2_process_factors();
     $titre_lower = fpt_normalize_text( $titre );
@@ -523,7 +641,17 @@ function fpt_calculate_process_co2( $titre, $poids_kg ) {
             break;
         }
     }
-    return round( ($poids_kg / 1000) * $factor, 6 );
+
+    // Ajustement au mix électrique local
+    $grid       = fpt_grid_intensity();
+    $factor_adj = $factor * $grid['multiplier'];
+
+    return round( ($poids_kg / 1000) * $factor_adj, 6 );
+}
+
+// ─── Retourner le détail grid pour affichage (dashboard acheteur, méthodologie) ─
+function fpt_get_grid_info() {
+    return fpt_grid_intensity();
 }
 
 function fpt_get_acheteurs() {
@@ -1153,9 +1281,11 @@ function fpt_shortcode_acheteur( $atts ) {
         <?php endif; ?>
 
         <p style="font-size:11px;color:#6b8070;margin-top:20px">
-            * <?php echo fpt_t(
-                'CO₂ recyclage : émissions produites par le process de recyclage (FEDEREC/ADEME ACV 2017). Gain net CO₂ = CO₂ évité − CO₂ recyclage.',
-                'CO₂ recycling: emissions produced by the recycling process (FEDEREC/ADEME LCA 2017). Net CO₂ gain = CO₂ avoided − CO₂ recycling.'
+            * <?php
+            $grid_info = fpt_get_grid_info();
+            echo fpt_t(
+                'CO₂ process : émissions produites par votre activité de recyclage, ajustées au mix électrique local (' . number_format($grid_info['gco2_per_kwh']) . ' g CO₂/kWh · ×' . $grid_info['multiplier'] . '). Source : FEDEREC/ADEME ACV 2017 (base France) × IEA 2024. Le CO₂ évité (gain net) est calculé séparément : émissions production primaire − émissions process recyclage (facteur ADEME).',
+                'CO₂ process: emissions produced by your recycling activity, adjusted for local electricity grid (' . number_format($grid_info['gco2_per_kwh']) . ' g CO₂/kWh · ×' . $grid_info['multiplier'] . '). Source: FEDEREC/ADEME LCA 2017 (France base) × IEA 2024. CO₂ avoided (net gain) is calculated separately: primary production emissions − recycling process emissions (ADEME factor).'
             ); ?>
         </p>
     </div>
@@ -2518,22 +2648,6 @@ function fpt_shortcode_dashboard( $atts ) {
                 <div class="fpt-impact-label"><?php echo fpt_t('CO₂ produit (recyclage)','CO₂ produced (recycling)'); ?></div>
             </div>
         </div>
-        <?php
-        // Bilan net
-        $bilan_net = round($total_co2 - $co2_produit_total, 2);
-        ?>
-        <div style="background:#e6f5ee;border:1.5px solid #1a7a4a;border-radius:10px;padding:14px 20px;margin:-8px 0 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-            <span style="font-size:14px;font-weight:600;color:#0f1c13">
-                ⚖️ <?php echo fpt_t('Bilan net CO₂','Net CO₂ balance'); ?>
-            </span>
-            <span style="font-family:monospace;font-size:20px;font-weight:700;color:#1a7a4a">
-                <?php echo esc_html( number_format($bilan_net, 2) ); ?> t CO₂
-            </span>
-            <span style="font-size:12px;color:#6b8070">
-                <?php echo fpt_t('évité − produit','avoided − produced'); ?>
-            </span>
-        </div>
-
         <!-- ── Section Santé Enfants / Child Health ──────────────────── -->
         <div class="fpt-health-section">
             <div class="fpt-health-header">
@@ -2794,6 +2908,11 @@ function fpt_shortcode_methodologie( $atts ) {
         <!-- SOURCES -->
         <h2>📚 <?php echo fpt_t('Sources officielles','Official Sources'); ?></h2>
         <div class="fpt-meth-source"><strong>ADEME Base Carbone</strong> — <?php echo fpt_t('Facteurs d\'émission CO₂ officiels (France/International)','Official CO₂ emission factors (France/International)'); ?> — basecarbone.ademe.fr</div>
+        <div class="fpt-meth-source"><strong>FEDEREC/ADEME ACV 2017</strong> — <?php echo fpt_t('Facteurs gain net : acier, cuivre, papier (ACV)','Net gain factors: steel, copper, paper (LCA)'); ?> — federec.com</div>
+        <div class="fpt-meth-source"><strong>EPA WARM v16 (2024)</strong> — <?php echo fpt_t('Waste Reduction Model — Facteurs de recyclage USA (cross-validation)','Waste Reduction Model — US recycling factors (cross-validation)'); ?> — epa.gov/warm</div>
+        <div class="fpt-meth-source"><strong>IEA Electricity (2024)</strong> — <?php echo fpt_t('Intensité carbone des réseaux électriques nationaux — ajustement CO₂ process','Carbon intensity of national electricity grids — process CO₂ adjustment'); ?> — iea.org</div>
+        <div class="fpt-meth-source"><strong>EPA eGRID (2023)</strong> — <?php echo fpt_t('Mix électrique USA — 380 g CO₂/kWh (mix national)','US electricity grid mix — 380 g CO₂/kWh (national average)'); ?> — epa.gov/egrid</div>
+        <div class="fpt-meth-source"><strong>ONEE/MASEN (2024)</strong> — <?php echo fpt_t('Mix électrique Maroc — 644 g CO₂/kWh (charbon + gaz, éolien en forte hausse)','Morocco electricity mix — 644 g CO₂/kWh (coal + gas, wind growing fast)'); ?></div>
         <div class="fpt-meth-source"><strong>WHO / OMS (2021)</strong> — Global Health Observatory — Lead Exposure in Children</div>
         <div class="fpt-meth-source"><strong>Pure Earth (2020)</strong> — Toxic Sites Database — Africa — Cadmium & Lead</div>
         <div class="fpt-meth-source"><strong>EPA AP-42 (2022)</strong> — Compilation of Air Pollutant Emission Factors — Open Burning</div>
@@ -2946,6 +3065,8 @@ function fpt_admin_page() {
         if (isset($_POST['fpt_rib_iban']))            update_option('fpt_rib_iban',             sanitize_text_field($_POST['fpt_rib_iban']));
         if (isset($_POST['fpt_rib_whatsapp']))        update_option('fpt_rib_whatsapp',         sanitize_text_field($_POST['fpt_rib_whatsapp']));
         if (isset($_POST['fpt_adresse_facturation'])) update_option('fpt_adresse_facturation',  sanitize_text_field($_POST['fpt_adresse_facturation']));
+        // Mix électrique
+        if (isset($_POST['fpt_grid_intensity_override'])) update_option('fpt_grid_intensity_override', max(0, intval($_POST['fpt_grid_intensity_override'])));
         echo '<div class="notice notice-success"><p>Paramètres sauvegardés / Settings saved.</p></div>';
     }
     // ── Stats en temps réel pour l'admin ───────────────────────────────────────
@@ -3175,6 +3296,75 @@ function fpt_admin_page() {
                         <input type="text" id="fpt_adresse_facturation" name="fpt_adresse_facturation"
                                value="<?php echo esc_attr(get_option('fpt_adresse_facturation','')); ?>"
                                placeholder="Casablanca, Maroc">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section : Mix électrique (CO₂ process) -->
+            <?php $grid_info = fpt_grid_intensity(); ?>
+            <div class="fpt-adm-card">
+                <div class="fpt-adm-card-head">
+                    <span class="fpt-adm-card-icon">⚡</span>
+                    <div>
+                        <h2 class="fpt-adm-card-title">Mix électrique — CO₂ process recyclage</h2>
+                        <p class="fpt-adm-card-desc">
+                            Intensité carbone du réseau électrique local · Ajuste le CO₂ produit par le process de recyclage (dashboard acheteur uniquement)
+                        </p>
+                    </div>
+                </div>
+                <div class="fpt-adm-fields">
+                    <!-- Affichage de la valeur détectée automatiquement -->
+                    <div style="background:var(--gray);border:1.5px solid var(--border);border-radius:8px;padding:14px 18px;font-size:13px">
+                        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                            <span style="font-size:20px">🌍</span>
+                            <div>
+                                <strong style="font-size:14px;color:var(--dark)">
+                                    Pays détecté : <?php echo esc_html( $country_name ?: '(non configuré)' ); ?>
+                                </strong><br>
+                                <span style="color:var(--muted)">
+                                    Intensité réseau : <strong style="font-family:var(--mono);color:var(--g)"><?php echo number_format($grid_info['gco2_per_kwh']); ?> g CO₂/kWh</strong>
+                                    &nbsp;·&nbsp; Multiplicateur : <strong style="font-family:var(--mono);color:var(--g)">×<?php echo $grid_info['multiplier']; ?></strong>
+                                    &nbsp;·&nbsp; <span style="font-size:11px"><?php echo esc_html($grid_info['source']); ?></span>
+                                </span>
+                            </div>
+                        </div>
+                        <?php
+                        // Exemples concrets avec le multiplicateur actuel
+                        $m   = $grid_info['multiplier'];
+                        $alu = round(0.36 * $m, 3);
+                        $cu  = round(1.304 * $m, 3);
+                        $fe  = round(1.10 * $m, 3);
+                        ?>
+                        <div style="margin-top:12px;display:flex;gap:12px;flex-wrap:wrap">
+                            <span style="background:var(--white);border:1px solid var(--border);border-radius:5px;padding:5px 10px;font-size:12px">
+                                🔵 Alu : <strong style="font-family:var(--mono)"><?php echo $alu; ?> t CO₂/t</strong>
+                            </span>
+                            <span style="background:var(--white);border:1px solid var(--border);border-radius:5px;padding:5px 10px;font-size:12px">
+                                🟤 Cuivre : <strong style="font-family:var(--mono)"><?php echo $cu; ?> t CO₂/t</strong>
+                            </span>
+                            <span style="background:var(--white);border:1px solid var(--border);border-radius:5px;padding:5px 10px;font-size:12px">
+                                ⚙️ Acier : <strong style="font-family:var(--mono)"><?php echo $fe; ?> t CO₂/t</strong>
+                            </span>
+                        </div>
+                        <p style="font-size:11px;color:var(--muted);margin-top:8px;margin-bottom:0">
+                            ⚠️ Ces valeurs s'appliquent uniquement au <strong>CO₂ process</strong> (dashboard acheteur).
+                            Le <strong>CO₂ évité</strong> (gain net, dashboard public) reste ADEME/FEDEREC — universel.
+                        </p>
+                    </div>
+
+                    <!-- Surcharge manuelle -->
+                    <div class="fpt-adm-field">
+                        <label for="fpt_grid_intensity_override">Surcharge manuelle (optionnel)</label>
+                        <div class="fpt-adm-input-row">
+                            <input type="number" id="fpt_grid_intensity_override" name="fpt_grid_intensity_override"
+                                   value="<?php echo esc_attr(get_option('fpt_grid_intensity_override','0')); ?>"
+                                   min="0" max="1200" step="1" style="width:100px">
+                            <span>g CO₂/kWh (0 = détection automatique par pays)</span>
+                        </div>
+                        <span class="fpt-adm-hint">
+                            Références : 🇫🇷 France 45 · 🇺🇸 USA 380 · 🇲🇦 Maroc 644 · 🇨🇩 RDC 35 · 🌍 Mondiale 380
+                            — Sources : IEA 2024, EPA eGRID 2023, ONEE/MASEN 2024
+                        </span>
                     </div>
                 </div>
             </div>

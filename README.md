@@ -5,7 +5,7 @@
 Automatically calculates CO₂ avoided, child health impact, commission invoicing, Stripe online payment, and financial reporting for every recycled waste batch. Built for [FerayPro Morocco](https://ma.feraypro.com), [FerayPro DRC](https://cd.feraypro.com), [FerayPro France](https://fr.feraypro.com), and [FerayPro USA](https://feraypro.com) — a circular waste marketplace operating globally.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.0.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.1.0-blue.svg)](CHANGELOG.md)
 [![UNICEF Venture Fund](https://img.shields.io/badge/UNICEF-Venture%20Fund%202026-00aeef.svg)](https://unicefinnovationfund.org)
 
 ---
@@ -48,14 +48,15 @@ feraypro-tracer/
 When a seller publishes a waste listing on HivePress / ListingHive, the plugin automatically:
 
 1. **Detects the material type** using `fpt_normalize_text()` — 200+ bilingual keywords (FR + EN) + Darija, Lingala, Swahili NLP transliteration
-2. **Calculates CO₂ net gain** using ADEME Base Carbone / FEDEREC ACV 2017 net gain factors (Primary − Recycled)
-3. **Calculates ERRI** (Exposure Risk Reduction Index) — Lead, PM2.5, Cadmium, Mercury — with population density multiplier by country
-4. **Generates a QR code** linking to the public batch traceability page
-5. **Updates the live impact dashboard** with cumulative totals and net CO₂ balance
-6. **Generates a commission invoice** (PDF) when the batch is collected — 20% to FerayPro, 80% to vendor
-7. **Accepts online payment** via Stripe Checkout — automatic confirmation via webhook
-8. **Tracks marketing partner referrals** via `?ref=` cookie system
-9. **Reports financial KPIs** via the Finance Dashboard module
+2. **Calculates CO₂ net gain** using ADEME Base Carbone / FEDEREC ACV 2017 net gain factors (Primary − Recycled) — **universal, same for all countries**
+3. **Adjusts CO₂ process** using `fpt_grid_intensity()` — local electricity grid carbon intensity (IEA 2024, EPA eGRID 2023, ONEE/MASEN 2024) — **buyer dashboard only**
+4. **Calculates ERRI** (Exposure Risk Reduction Index) — Lead, PM2.5, Cadmium, Mercury — with population density multiplier by country
+5. **Generates a QR code** linking to the public batch traceability page
+6. **Updates the live impact dashboard** with cumulative totals and net CO₂ balance
+7. **Generates a commission invoice** (PDF) when the batch is collected — 20% to FerayPro, 80% to vendor
+8. **Accepts online payment** via Stripe Checkout — automatic confirmation via webhook
+9. **Tracks marketing partner referrals** via `?ref=` cookie system
+10. **Reports financial KPIs** via the Finance Dashboard module
 
 ---
 
@@ -182,8 +183,13 @@ add_action('template_redirect', function() {
 | TVA | 0% | 0% | 16% | 20% |
 | Weight unit | kg | lb | kg | kg |
 | Stripe currency | EUR* | USD | EUR* | EUR |
+| Grid intensity | 644 g CO₂/kWh | 380 g CO₂/kWh | 35 g CO₂/kWh | 45 g CO₂/kWh |
+| Grid multiplier (CO₂ process) | ×14.3 | ×8.44 | ×0.78 | ×1.00 |
 
 *fallback — MAD/CDF not supported by Stripe
+
+> **CO₂ net gain (avoided)** is identical for all countries — ADEME/FEDEREC factors, universal.  
+> **CO₂ process** (buyer dashboard) is adjusted by grid multiplier — local electricity mix matters.
 
 ---
 
@@ -222,9 +228,10 @@ add_action('template_redirect', function() {
 
 ## 🗺️ Roadmap
 
-### Phase 1 — MVP (Current — v2.0.0)
+### Phase 1 — MVP (Current — v2.1.0)
 - [x] CO₂ net gain engine (200+ materials, FR + EN + Darija/Lingala/Swahili NLP)
 - [x] CO₂ process factors for buyer dashboard (FEDEREC/ADEME LCA 2017)
+- [x] **Grid intensity adjustment** — CO₂ process scaled to local electricity mix (IEA 2024 / EPA eGRID 2023 / ONEE-MASEN 2024) — 35+ countries
 - [x] ERRI with population density multiplier
 - [x] QR code + Digital Batch ID per batch
 - [x] Public environmental impact dashboard
@@ -256,6 +263,10 @@ add_action('template_redirect', function() {
 
 - [ADEME Base Carbone](https://base-empreinte.ademe.fr) — CO₂ net gain factors
 - [FEDEREC/ADEME ACV 2017](https://federec.com) — Steel, copper, paper LCA
+- [EPA WARM v16 (2024)](https://www.epa.gov/warm) — US recycling factors (cross-validation)
+- [IEA Electricity (2024)](https://www.iea.org) — National grid carbon intensity — CO₂ process adjustment
+- [EPA eGRID (2023)](https://www.epa.gov/egrid) — US electricity grid mix — 380 g CO₂/kWh national average
+- [ONEE/MASEN (2024)](https://www.masen.ma) — Morocco electricity mix — 644 g CO₂/kWh
 - [WHO (2021)](https://www.who.int/data/gho) — Lead exposure, ERRI coefficient
 - [Pure Earth (2020)](https://www.pureearth.org) — Cadmium & lead at African sites
 - [EPA AP-42 (2022)](https://www.epa.gov) — PM2.5 open burning
@@ -275,7 +286,7 @@ MIT License — Copyright (c) 2026 FerayPro
 ## 🏷️ Citation
 
 ```
-FerayPro Tracer v2.0.0 (2026). Open-source waste batch traceability plugin.
+FerayPro Tracer v2.1.0 (2026). Open-source waste batch traceability plugin.
 MIT License. https://github.com/feraypro/feraypro-tracer
 ```
 
