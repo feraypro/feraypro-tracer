@@ -23,7 +23,7 @@ feraypro-tracer/
 │   │   ├── finance.php          ← Module dashboard financier [fpt_dashboard_finance]
 │   │   └── finance.css          ← Styles du dashboard financier
 │   └── stripe/
-│       └── stripe.php           ← Module paiement Stripe (NEW v2.0.0)
+│       └── stripe.php           ← Module paiement Stripe 
 ├── CHANGELOG.md
 └── README.md
 ```
