@@ -18,6 +18,7 @@ define( 'FPT_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 // ─── Chargement des modules ────────────────────────────────────────────────────
 require_once FPT_PLUGIN_DIR . 'modules/finance/finance.php';
 require_once FPT_PLUGIN_DIR . 'modules/stripe/stripe.php';
+require_once FPT_PLUGIN_DIR . 'modules/ai/ai.php';
 
 // ─── Normalisation texte multilingue ─────────────────────────────────────────
 // Supporte FR, EN + translittérations Darija, Lingala, Swahili de base
@@ -1294,6 +1295,9 @@ function fpt_shortcode_acheteur( $atts ) {
 }
 
 // ─── Recherche des prix du jour pour un type de déchet ───────────────────────
+// Si l'IA est activée et que le scoring classique échoue (aucun mot-clé trouvé,
+// ou score sous le seuil), on tente un matching sémantique via fpt_ai_match_price().
+// Le scoring classique reste prioritaire — l'IA n'intervient qu'en complément.
 function fpt_get_prix_du_jour( $titre_lot ) {
     $titre_lower    = fpt_normalize_text( $titre_lot );
     $category_slug  = get_option( 'fpt_prix_cat_slug', 'prix' );
@@ -1324,7 +1328,10 @@ function fpt_get_prix_du_jour( $titre_lot ) {
         }
     }
 
-    if ( ! $matched_keyword ) return null;
+    // ── Voie IA : aucun mot-clé détecté → tenter le matching sémantique ──────
+    if ( ! $matched_keyword ) {
+        return fpt_get_prix_du_jour_ai_fallback( $titre_lot, $prix_listings );
+    }
 
     // ── Matching par score de pertinence ──────────────────────────────────
     // Cherche l'annonce Prix du jour dont le titre contient le mieux
@@ -1362,7 +1369,10 @@ function fpt_get_prix_du_jour( $titre_lot ) {
     }
 
     // Seuil minimum : le mot-clé principal doit être présent (score >= 10)
-    if ( ! $best_match || $best_score < 10 ) return null;
+    if ( ! $best_match || $best_score < 10 ) {
+        // ── Voie IA : scoring classique sous le seuil → tenter le sémantique ──
+        return fpt_get_prix_du_jour_ai_fallback( $titre_lot, $prix_listings );
+    }
 
     $prix_key    = 'hp_' . get_option( 'fpt_key_prix_jour', 'prix' );
     $prix_field  = get_post_meta( $best_match->ID, $prix_key, true );
@@ -1382,6 +1392,51 @@ function fpt_get_prix_du_jour( $titre_lot ) {
     ];
 }
 
+// ─── Fallback IA : matching sémantique quand le scoring par mots-clés échoue ──
+// N'est appelée que si fpt_ai_enabled = true ; sinon retourne null comme avant.
+function fpt_get_prix_du_jour_ai_fallback( $titre_lot, $prix_listings ) {
+    if ( ! get_option( 'fpt_ai_enabled', false ) || ! function_exists( 'fpt_ai_match_price' ) ) {
+        return null;
+    }
+
+    $prix_key   = 'hp_' . get_option( 'fpt_key_prix_jour', 'prix' );
+    $buyers_key = 'hp_' . get_option( 'fpt_key_buyersprice', 'buyersprice' );
+
+    $refs = [];
+    foreach ( $prix_listings as $p ) {
+        $refs[] = [
+            'id'    => $p->ID,
+            'title' => $p->post_title,
+            'price' => get_post_meta( $p->ID, $prix_key, true ),
+            'unit'  => '',
+        ];
+    }
+
+    $match = fpt_ai_match_price( $titre_lot, $refs );
+
+    if ( empty( $match['matched_id'] ) || $match['score'] < 0.4 ) {
+        return null;
+    }
+
+    $best_match  = get_post( $match['matched_id'] );
+    if ( ! $best_match ) return null;
+
+    $description = trim( $best_match->post_content );
+    if ( empty( $description ) ) {
+        $description = get_post_meta( $best_match->ID, $buyers_key, true );
+    }
+
+    return [
+        'titre'       => $best_match->post_title,
+        'description' => $description,
+        'prix_range'  => get_post_meta( $best_match->ID, $prix_key, true ),
+        'url'         => get_permalink( $best_match->ID ),
+        'updated'     => get_the_modified_date( 'd/m/Y', $best_match->ID ),
+        'ai_matched'  => true, // flag pour affichage éventuel "matché par IA"
+    ];
+}
+
+
 // ─── Injection automatique du bloc CO₂ sur chaque annonce vendeur ─────────────
 add_filter( 'the_content', 'fpt_inject_on_listing', 20 );
 function fpt_inject_on_listing( $content ) {
@@ -1400,7 +1455,7 @@ function fpt_inject_on_listing( $content ) {
     // Si pas encore tracé (annonce existante avant installation du plugin)
     if ( ! $co2 ) {
         $titre = get_the_title( $post_id );
-        $co2   = fpt_calculate_co2( $titre, $poids_kg );
+        $co2   = fpt_calculate_co2( $titre, $poids_kg, $post_id );
         update_post_meta( $post_id, '_fpt_co2_avoided', $co2 );
         update_post_meta( $post_id, '_fpt_traced_at', current_time( 'mysql' ) );
         $lot_id = 'FP-' . strtoupper( substr( md5( $post_id . $titre ), 0, 8 ) );
@@ -2168,12 +2223,27 @@ function fpt_co2_factors() {
 }
 
 // ─── Calcul CO₂ évité ─────────────────────────────────────────────────────────
-function fpt_calculate_co2( $titre, $poids_kg ) {
+// Si le module IA est activé (fpt_ai_enabled) ET qu'un slug IA est déjà stocké
+// sur le post, on l'utilise directement — sinon fallback sur strpos() classique.
+// L'IA ne calcule jamais : elle classe → PHP lit fpt_co2_factors() pour le facteur.
+function fpt_calculate_co2( $titre, $poids_kg, $post_id = 0 ) {
     if ( empty( $poids_kg ) || $poids_kg <= 0 ) return 0;
 
-    $factors = fpt_co2_factors();
+    $factors      = fpt_co2_factors();
+    $poids_tonnes = $poids_kg / 1000;
+
+    // ── Voie IA : slug pré-classifié stocké en meta ──────────────────────────
+    // fpt_ai_override_material() l'écrit en amont via do_action('fpt_before_co2_save')
+    if ( $post_id && get_option( 'fpt_ai_enabled', false ) ) {
+        $ai_slug = get_post_meta( $post_id, '_fpt_ai_slug', true );
+        if ( $ai_slug && isset( $factors[ $ai_slug ] ) ) {
+            return round( $poids_tonnes * $factors[ $ai_slug ], 4 );
+        }
+    }
+
+    // ── Voie classique : strpos() sur le titre normalisé ─────────────────────
     $titre_lower = fpt_normalize_text( $titre );
-    $factor = $factors['default'];
+    $factor      = $factors['default'];
 
     foreach ( $factors as $keyword => $value ) {
         if ( strpos( $titre_lower, $keyword ) !== false ) {
@@ -2182,8 +2252,6 @@ function fpt_calculate_co2( $titre, $poids_kg ) {
         }
     }
 
-    // poids en kg → tonnes
-    $poids_tonnes = $poids_kg / 1000;
     return round( $poids_tonnes * $factor, 4 );
 }
 
@@ -2193,7 +2261,19 @@ function fpt_qr_url( $lot_url ) {
 }
 
 // ─── Population density multiplier for ERRI ───────────────────────────────────
-function fpt_get_population_density_multiplier() {
+// Si l'IA est activée ET qu'une localisation précise est disponible, on délègue
+// à fpt_ai_erri_multiplier() pour un calcul micro-local par quartier.
+// Sinon : multiplicateurs fixes par pays (logique originale).
+function fpt_get_population_density_multiplier( $location = '', $waste_type = '' ) {
+    // Voie IA : si activée et localisation fournie → micro-local par quartier
+    if ( get_option( 'fpt_ai_enabled', false ) && ! empty( $location ) && function_exists( 'fpt_ai_erri_multiplier' ) ) {
+        $result = fpt_ai_erri_multiplier( $location, $waste_type );
+        if ( isset( $result['multiplier'] ) && $result['source'] === 'ai' ) {
+            return (float) $result['multiplier'];
+        }
+    }
+
+    // Voie classique : multiplicateurs fixes par pays
     $country = strtolower( get_option( 'fpt_country_name', '' ) );
     if ( strpos($country, 'maroc') !== false || strpos($country, 'morocco') !== false ) return 1.2;
     if ( strpos($country, 'congo') !== false || strpos($country, 'rdc') !== false )     return 1.8;
@@ -2323,7 +2403,11 @@ function fpt_on_listing_save( $post_id, $post, $update ) {
 
     if ( $poids_kg <= 0 ) return;
 
-    $co2 = fpt_calculate_co2( $titre, $poids_kg );
+    // ── Hook IA : classification matière (slug uniquement, calcul reste en PHP) ──
+    // fpt_ai_override_material() (modules/ai/ai.php) écrit _fpt_ai_slug si activé
+    do_action( 'fpt_before_co2_save', $post_id, $titre );
+
+    $co2 = fpt_calculate_co2( $titre, $poids_kg, $post_id );
 
     // Stocker les données de traçabilité sur le lot
     update_post_meta( $post_id, '_fpt_co2_avoided', $co2 );
@@ -2331,6 +2415,37 @@ function fpt_on_listing_save( $post_id, $post, $update ) {
     // _fpt_traced_at : ne mettre la date que lors de la première publication (pas aux updates)
     if ( ! get_post_meta( $post_id, '_fpt_traced_at', true ) ) {
         update_post_meta( $post_id, '_fpt_traced_at', current_time( 'mysql' ) );
+    }
+
+    // ── Génération automatique de description IA ─────────────────────────────
+    // Ne s'exécute que si l'IA est activée et que la description est vide
+    // (ne jamais écraser une saisie manuelle de l'utilisateur).
+    if ( get_option( 'fpt_ai_enabled', false ) && function_exists( 'fpt_ai_generate_description' ) ) {
+        $existing_content = trim( $post->post_content ?? '' );
+        if ( empty( $existing_content ) ) {
+            $ville = get_post_meta( $post_id, fpt_key_ville(), true );
+            $lang  = fpt_lang() === 'en' ? 'en' : 'fr';
+            $co2_kg = $co2 * 1000;
+
+            $desc = fpt_ai_generate_description( $titre, $poids_kg, $ville, $co2_kg, $lang );
+
+            if ( $desc['source'] === 'ai' && ! empty( $desc['description'] ) ) {
+                // wp_update_post sur un save_post déjà en cours → retirer le hook pour éviter la boucle
+                remove_action( 'save_post_hp_listing', 'fpt_on_listing_save', 20 );
+                wp_update_post([
+                    'ID'           => $post_id,
+                    'post_content' => $desc['description'],
+                ]);
+                add_action( 'save_post_hp_listing', 'fpt_on_listing_save', 20, 3 );
+
+                if ( ! empty( $desc['tags'] ) ) {
+                    update_post_meta( $post_id, '_fpt_ai_tags', $desc['tags'] );
+                }
+                if ( ! empty( $desc['eco_arg'] ) ) {
+                    update_post_meta( $post_id, '_fpt_ai_eco_arg', $desc['eco_arg'] );
+                }
+            }
+        }
     }
 
     // Synchroniser les totaux globaux en temps réel (via SQL COUNT/SUM)
@@ -2427,7 +2542,7 @@ function fpt_recalculate_global_stats() {
         if ( $poids_kg <= 0 ) continue; // ignorer fiches acheteurs (pas de poids)
 
         $titre = get_the_title( $id );
-        $co2   = fpt_calculate_co2( $titre, $poids_kg );
+        $co2   = fpt_calculate_co2( $titre, $poids_kg, $id );
 
         update_post_meta( $id, '_fpt_co2_avoided', $co2 );
         update_post_meta( $id, '_fpt_lot_id', 'FP-' . strtoupper( substr( md5( $id . $titre ), 0, 8 ) ) );
@@ -3067,6 +3182,14 @@ function fpt_admin_page() {
         if (isset($_POST['fpt_adresse_facturation'])) update_option('fpt_adresse_facturation',  sanitize_text_field($_POST['fpt_adresse_facturation']));
         // Mix électrique
         if (isset($_POST['fpt_grid_intensity_override'])) update_option('fpt_grid_intensity_override', max(0, intval($_POST['fpt_grid_intensity_override'])));
+        // Module IA
+        update_option( 'fpt_ai_enabled', isset($_POST['fpt_ai_enabled']) ? 1 : 0 );
+        if (isset($_POST['fpt_ai_api_key'])) {
+            $new_key = sanitize_text_field( $_POST['fpt_ai_api_key'] );
+            // Ne réécrit la clé que si un nouveau champ non vide est soumis
+            // (évite d'effacer la clé si le champ est ré-affiché vide pour sécurité)
+            if ( $new_key !== '' ) update_option( 'fpt_ai_api_key', $new_key );
+        }
         echo '<div class="notice notice-success"><p>Paramètres sauvegardés / Settings saved.</p></div>';
     }
     // ── Stats en temps réel pour l'admin ───────────────────────────────────────
