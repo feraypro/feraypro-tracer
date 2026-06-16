@@ -5,7 +5,7 @@
 Automatically calculates CO₂ avoided, child health impact, commission invoicing, Stripe online payment, and financial reporting for every recycled waste batch. Built for [FerayPro Morocco](https://ma.feraypro.com), [FerayPro DRC](https://cd.feraypro.com), [FerayPro France](https://fr.feraypro.com), and [FerayPro USA](https://feraypro.com) — a circular waste marketplace operating globally.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.1.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.2.0-blue.svg)](CHANGELOG.md)
 [![UNICEF Venture Fund](https://img.shields.io/badge/UNICEF-Venture%20Fund%202026-00aeef.svg)](https://unicefinnovationfund.org)
 
 ---
@@ -22,8 +22,10 @@ feraypro-tracer/
 │   ├── finance/
 │   │   ├── finance.php          ← Module dashboard financier [fpt_dashboard_finance]
 │   │   └── finance.css          ← Styles du dashboard financier
-│   └── stripe/
-│       └── stripe.php           ← Module paiement Stripe 
+│   ├── stripe/
+│   │   └── stripe.php           ← Module paiement Stripe
+│   └── ai/
+│       └── ai.php               ← Module Intelligence Artificielle (classification, ERRI, prix, descriptions)
 ├── CHANGELOG.md
 └── README.md
 ```
@@ -47,16 +49,49 @@ feraypro-tracer/
 
 When a seller publishes a waste listing on HivePress / ListingHive, the plugin automatically:
 
-1. **Detects the material type** using `fpt_normalize_text()` — 200+ bilingual keywords (FR + EN) + Darija, Lingala, Swahili NLP transliteration
+1. **Detects the material type** using `fpt_normalize_text()` — 200+ bilingual keywords (FR + EN) + Darija, Lingala, Swahili NLP transliteration — or via **AI classification** (Claude Haiku) when the AI module is enabled, with automatic fallback to keyword detection
 2. **Calculates CO₂ net gain** using ADEME Base Carbone / FEDEREC ACV 2017 net gain factors (Primary − Recycled) — **universal, same for all countries**
 3. **Adjusts CO₂ process** using `fpt_grid_intensity()` — local electricity grid carbon intensity (IEA 2024, EPA eGRID 2023, ONEE/MASEN 2024) — **buyer dashboard only**
-4. **Calculates ERRI** (Exposure Risk Reduction Index) — Lead, PM2.5, Cadmium, Mercury — with population density multiplier by country
+4. **Calculates ERRI** (Exposure Risk Reduction Index) — Lead, PM2.5, Cadmium, Mercury — with a population density multiplier, either fixed per country or **micro-local per neighborhood** (AI-evaluated) when the AI module is enabled
 5. **Generates a QR code** linking to the public batch traceability page
 6. **Updates the live impact dashboard** with cumulative totals and net CO₂ balance
 7. **Generates a commission invoice** (PDF) when the batch is collected — 20% to FerayPro, 80% to vendor
 8. **Accepts online payment** via Stripe Checkout — automatic confirmation via webhook
 9. **Tracks marketing partner referrals** via `?ref=` cookie system
 10. **Reports financial KPIs** via the Finance Dashboard module
+11. **Matches today's prices semantically** via AI when keyword scoring finds no match — and **auto-generates a professional listing description** from minimal user input, when the AI module is enabled
+
+---
+
+## 🤖 AI Module (v2.2.0)
+
+### Philosophy — AI classifies, PHP calculates
+
+The AI module never computes CO₂, ERRI, or prices itself. It only returns a **classification input** — a validated material slug, a density multiplier, or a matched price reference — which the existing deterministic PHP logic then turns into a number. This keeps every calculation auditable against `fpt_co2_factors()` and the official sources, regardless of whether the classification came from a keyword match or an AI call.
+
+### What it solves
+
+| Limitation of the rigid approach | AI-powered solution |
+|-----------------------------------|----------------------|
+| `strpos()` misses synonyms, typos, and implicit descriptions ("câbles dénudés de section moyenne" without the word "cuivre") | Claude classifies based on context, returning one of the validated slugs from `fpt_co2_factors()` |
+| Fixed density multiplier per country (Morocco ×1.2 for the whole country) ignores neighborhood-level reality | `fpt_ai_erri_multiplier()` evaluates the actual zone (dense informal settlement vs. rural) from free-text location |
+| Price matching via word overlap fails on synonyms or grade variants ("Cuivre Millberry" vs. "Cuivre standard") | `fpt_ai_match_price()` finds the semantically closest price reference, even across languages or grades |
+| Listings with minimal input ("vieux cables") look unprofessional to industrial buyers | `fpt_ai_generate_description()` produces a structured listing with the calculated CO₂ argument included |
+
+### Four modules
+
+1. **Material classification** (`fpt_ai_classify_material()`) — returns a slug validated against `fpt_co2_factors()`; PHP then reads the exact ADEME/FEDEREC factor. Cached 24h per title.
+2. **Micro-local ERRI** (`fpt_ai_erri_multiplier()`) — returns a density multiplier (bounded 0.3–2.5) based on the actual neighborhood, not just the country. Cached 24h per location.
+3. **Semantic price matching** (`fpt_ai_match_price()`) — only triggered when keyword scoring fails (score < 10) or finds no match; preserves the existing scoring as the primary path.
+4. **Automatic description generation** (`fpt_ai_generate_description()`) — only runs when the listing description is empty, never overwrites manual input.
+
+### Fallback guarantee
+
+Every AI function falls back to the original logic (`strpos()`, `similar_text()`, fixed country multiplier) when: the API key is missing or invalid, the API call fails or times out, the returned slug isn't in the validated list, or the AI module is disabled (`fpt_ai_enabled = false`, the default).
+
+### Setup
+
+FP Tracer → ⚙️ Paramètres → 🤖 Intelligence Artificielle. Enable the checkbox, paste an [Anthropic API key](https://console.anthropic.com), test the connection. Model used: `claude-haiku-4-5` — estimated cost ~$0.001 per listing processed.
 
 ---
 
@@ -213,6 +248,11 @@ add_action('template_redirect', function() {
 | `_fpt_stripe_session_id` | string | ID Checkout Session Stripe |
 | `_fpt_stripe_payment_intent` | string | ID Payment Intent confirmé |
 | `_fpt_stripe_paid_at` | int | Timestamp confirmation webhook |
+| `_fpt_ai_slug` | string | Slug matière retourné par l'IA (validé contre `fpt_co2_factors()`) |
+| `_fpt_ai_confidence` | string | Confiance de la classification IA : `high` / `medium` / `low` |
+| `_fpt_ai_source` | string | Origine du calcul CO₂ : `ai` ou `fallback` |
+| `_fpt_ai_tags` | array | Tags SEO générés pour la description automatique |
+| `_fpt_ai_eco_arg` | string | Argument environnemental généré par l'IA (1 phrase) |
 
 ---
 
@@ -223,12 +263,13 @@ add_action('template_redirect', function() {
 | `fpt_admin_settings_extra_cards` | action | — | Injecte des cartes dans les réglages admin |
 | `fpt_invoice_payment_methods` | action | `$lot_id`, `$comm20_ttc` | Injecte des modes de paiement dans la facture |
 | `fpt_metabox_after_commission` | action | `$post_id` | Injecte du contenu après le bloc commission dans la metabox |
+| `fpt_before_co2_save` | action | `$post_id`, `$titre` | Déclenché avant le calcul CO₂ — le module IA s'y accroche pour classifier la matière et écrire `_fpt_ai_slug` |
 
 ---
 
 ## 🗺️ Roadmap
 
-### Phase 1 — MVP (Current — v2.1.0)
+### Phase 1 — MVP (Current — v2.2.0)
 - [x] CO₂ net gain engine (200+ materials, FR + EN + Darija/Lingala/Swahili NLP)
 - [x] CO₂ process factors for buyer dashboard (FEDEREC/ADEME LCA 2017)
 - [x] **Grid intensity adjustment** — CO₂ process scaled to local electricity mix (IEA 2024 / EPA eGRID 2023 / ONEE-MASEN 2024) — 35+ countries
@@ -245,17 +286,20 @@ add_action('template_redirect', function() {
 - [x] Financial dashboard `[fpt_dashboard_finance]`
 - [x] Architecture modulaire (`modules/`)
 - [x] **Stripe online payment** — Checkout Session + webhook auto-confirmation
+- [x] **AI module** — material classification, micro-local ERRI, semantic price matching, auto-generated descriptions (Claude Haiku, systematic fallback to keyword logic)
 
 ### Phase 2 — ML Refinement (2026–2027)
-- [ ] Random Forest model (Morocco + DRC field data)
+- [ ] Random Forest model (Morocco + DRC field data) — complements AI classification with a locally-trained statistical model
 - [ ] Statistical confidence intervals on CO₂ factors
-- [ ] Geospatial impact map
-- [ ] Full Arabic, Lingala, Swahili keyword vocabularies
-- [ ] TF-IDF fallback classification
+- [ ] Geospatial impact map — pairs with micro-local ERRI for neighborhood-level visualization
+- [ ] Full Arabic, Lingala, Swahili keyword vocabularies (reduces reliance on AI fallback for low-connectivity sites)
+- [ ] TF-IDF fallback classification (offline-capable alternative when AI/network is unavailable)
 - [ ] Export API for governments/NGOs
 - [ ] GitHub auto-update across all country sites
 - [ ] Transient cache for finance dashboard (large datasets)
 - [ ] Stripe multi-currency native (MAD via local acquirer)
+- [ ] Field validation of AI classification accuracy against manually-verified batches
+- [ ] Multimodal classification (title + photo) for ambiguous listings
 
 ---
 
@@ -274,6 +318,7 @@ add_action('template_redirect', function() {
 - [UNICEF (2020)](https://www.unicef.org/reports/toxic-truth) — Child lead exposure
 - [HEI (2020)](https://www.healtheffects.org) — PM2.5 ERRI coefficient
 - [FAO (2021)](https://www.fao.org) — Carbon sequestration
+- [Anthropic Claude API](https://docs.claude.com) — AI classification, semantic matching, content generation (model: `claude-haiku-4-5`)
 
 ---
 
@@ -286,7 +331,7 @@ MIT License — Copyright (c) 2026 FerayPro
 ## 🏷️ Citation
 
 ```
-FerayPro Tracer v2.1.0 (2026). Open-source waste batch traceability plugin.
+FerayPro Tracer v2.2.0 (2026). Open-source waste batch traceability plugin.
 MIT License. https://github.com/feraypro/feraypro-tracer
 ```
 

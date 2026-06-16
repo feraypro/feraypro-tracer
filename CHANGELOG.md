@@ -5,6 +5,61 @@ Format: [Keep a Changelog](https://keepachangelog.com) · [Semantic Versioning](
 
 ---
 
+## [2.2.0] — 2026
+
+### Added
+- **Module Intelligence Artificielle** — `modules/ai/ai.php`
+  - Classification matières par IA (Claude Haiku) — remplace les défaillances du `strpos()` rigide sur titres ambigus, fautes d'orthographe, ou langues locales mal couvertes
+  - **Règle d'architecture stricte** : l'IA ne calcule jamais de CO₂. Elle retourne uniquement un slug validé contre `fpt_co2_factors()` — tout le calcul reste en PHP, déterministe et auditable
+  - **ERRI micro-local** — `fpt_ai_erri_multiplier()` évalue la densité de population réelle à partir d'une localisation texte libre (ville, quartier, commune) plutôt qu'un multiplicateur fixe par pays
+  - **Matching sémantique des prix** — `fpt_ai_match_price()` retrouve la référence de prix la plus pertinente même quand aucun mot-clé exact ne correspond (synonymes, qualité/grade, langue)
+  - **Génération automatique de description** — `fpt_ai_generate_description()` transforme une saisie minimale ("vieux cables") en fiche technique professionnelle avec argument CO₂ intégré, uniquement si la description est vide
+  - **Fallback systématique** : chaque fonction IA retombe sur la logique `strpos()`/`similar_text()` existante si l'API est indisponible, si la confiance est faible, ou si le slug retourné n'est pas dans la liste validée
+  - **Cache transient WordPress** (24h) sur la classification matière et l'ERRI micro-local — élimine les appels API redondants sur un même titre/localisation
+  - Carte admin **"🤖 Intelligence Artificielle"** dans FP Tracer → ⚙️ Paramètres (activation, clé API Anthropic, bouton de test de connexion)
+  - Modèle utilisé : `claude-haiku-4-5` — coût estimé ~$0.001 par annonce traitée
+
+- **Nouveaux meta keys WordPress** (non rétrocompatibles cassants — purement additifs)
+
+  | Meta key | Type | Description |
+  |----------|------|--------------|
+  | `_fpt_ai_slug` | string | Slug matière retourné par l'IA (validé contre `fpt_co2_factors()`) |
+  | `_fpt_ai_confidence` | string | `high` \| `medium` \| `low` |
+  | `_fpt_ai_source` | string | `ai` \| `fallback` |
+  | `_fpt_ai_tags` | array | Tags SEO générés pour la description automatique |
+  | `_fpt_ai_eco_arg` | string | Argument environnemental généré (1 phrase) |
+
+- **Nouvelles options WordPress**
+
+  | Option | Type | Description |
+  |--------|------|--------------|
+  | `fpt_ai_enabled` | bool | Active/désactive tous les modules IA — `false` par défaut |
+  | `fpt_ai_api_key` | string | Clé API Anthropic (jamais ré-affichée en clair après saisie) |
+
+- **Hook d'extensibilité**
+
+  | Hook | Paramètres | Description |
+  |------|-----------|--------------|
+  | `fpt_before_co2_save` | `$post_id`, `$titre` | Déclenché avant le calcul CO₂ — `fpt_ai_override_material()` s'y accroche pour écrire `_fpt_ai_slug` |
+
+### Changed
+- `fpt_calculate_co2( $titre, $poids_kg, $post_id = 0 )` — nouveau 3ᵉ paramètre optionnel. Si l'IA est activée et qu'un slug validé existe pour ce post, il est utilisé ; sinon comportement strictement identique à v2.1.1
+- `fpt_get_population_density_multiplier( $location = '', $waste_type = '' )` — nouveaux paramètres optionnels pour le calcul micro-local ; sans eux, comportement identique à v2.1.1 (multiplicateur fixe par pays)
+- `fpt_get_prix_du_jour()` — retombe sur le matching sémantique IA uniquement quand le scoring par mots-clés ne trouve aucune correspondance ou reste sous le seuil (score < 10) ; ne remplace jamais la logique existante, la complète
+- `fpt_on_listing_save()` : ajout de `do_action('fpt_before_co2_save', ...)` avant le calcul CO₂, et génération automatique de description si l'IA est activée et le champ description est vide
+- README, METHODOLOGY mis à jour (section IA, architecture hybride PHP/IA)
+- Version bump 2.1.1 → 2.2.0
+
+### Security
+- La clé API Anthropic n'est jamais ré-affichée en clair dans le formulaire admin après saisie (champ masqué avec placeholder tronqué) — seule une nouvelle valeur non vide la remplace à la sauvegarde
+
+### Notes
+- **Rétrocompatibilité totale** : `fpt_ai_enabled = false` par défaut. Aucun comportement existant ne change jusqu'à activation explicite et configuration d'une clé API valide
+- Architecture non-invasive : une seule nouvelle fonction ajoutée dans `feraypro-tracer.php` (`fpt_get_prix_du_jour_ai_fallback`), tout le reste enrichit les fonctions existantes via paramètres optionnels et hooks `do_action`
+- L'IA ne fait jamais de calcul CO₂, ERRI brut, ou prix — elle ne fournit que des entrées (slug, multiplicateur, référence) que le PHP existant transforme déterministiquement
+
+---
+
 ## [2.1.1] — 2026
 
 ### Removed

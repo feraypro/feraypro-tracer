@@ -1,7 +1,7 @@
 # FerayPro Tracer — Calculation Methodology
 
 **Last updated:** 2026  
-**Version:** 2.1.0  
+**Version:** 2.2.0  
 **License:** MIT  
 
 ---
@@ -22,13 +22,15 @@ Source: FEDEREC/ADEME ACV 2017. This is the scientifically rigorous approach val
 
 1. [Input Data](#1-input-data)
 2. [Material Detection](#2-material-detection)
-3. [Section 1 — CO₂ Impact](#3-section-1--co₂-impact)
-4. [Section 1b — CO₂ Process Adjustment (Grid Intensity)](#4-section-1b--co₂-process-adjustment-grid-intensity)
-5. [Section 2 — Child Health Impact (ERRI)](#5-section-2--child-health-impact-erri)
-6. [Dashboard Equivalents](#6-dashboard-equivalents)
-7. [Limitations & Validation Status](#7-limitations--validation-status)
-8. [Phase 2 — ML Refinement](#8-phase-2--ml-refinement)
-9. [All Sources](#9-all-sources)
+3. [Material Detection — AI-Assisted Classification](#2b-material-detection--ai-assisted-classification)
+4. [Section 1 — CO₂ Impact](#3-section-1--co₂-impact)
+5. [Section 1b — CO₂ Process Adjustment (Grid Intensity)](#4-section-1b--co₂-process-adjustment-grid-intensity)
+6. [Section 2 — Child Health Impact (ERRI)](#5-section-2--child-health-impact-erri)
+7. [Section 2b — Micro-Local Density (AI-Assisted)](#5b-section-2b--micro-local-density-ai-assisted)
+8. [Dashboard Equivalents](#6-dashboard-equivalents)
+9. [Limitations & Validation Status](#7-limitations--validation-status)
+10. [Phase 2 — ML Refinement](#8-phase-2--ml-refinement)
+11. [All Sources](#9-all-sources)
 
 ---
 
@@ -57,6 +59,45 @@ Then compares against 200+ bilingual keywords (FR + EN). First matching keyword 
 **Darija (Morocco):** خردة → ferraille, نحاس → cuivre, حديد → fer  
 **Lingala (DRC):** singa → cable, likoxi → cuivre  
 **Swahili (DRC East/Kenya):** chuma → fer, shaba → cuivre, betri → batterie
+
+---
+
+## 2b. Material Detection — AI-Assisted Classification
+
+### Principle: AI classifies, PHP calculates
+
+When the AI module is enabled (`fpt_ai_enabled = true`), material detection can be delegated to an AI classifier (Claude Haiku) instead of — or as a complement to — the keyword matching described in Section 2. The architecture enforces a strict separation of concerns:
+
+```
+AI responsibility   : title text  →  validated material slug
+PHP responsibility  : material slug  →  CO₂ factor (fpt_co2_factors())  →  CO₂ avoided (t)
+```
+
+The AI never returns a CO₂ value, a factor, or any number used in the final calculation. It returns a slug, which is checked against the exact same `fpt_co2_factors()` table used by the keyword method. If the returned slug is not in that table, the result is rejected and the keyword method runs instead.
+
+### Why this matters for auditability
+
+Because the AI's only output is a slug from a closed, versioned list, every CO₂ figure on the platform — whether classified by keyword or by AI — traces back to the same ADEME/FEDEREC factor table documented in Section 3. The AI changes *which* row of the table is selected; it never changes the table itself or the arithmetic applied to it.
+
+### When AI classification is used
+
+| Condition | Material source |
+|-----------|-----------------|
+| `fpt_ai_enabled = false` (default) | Keyword matching only (Section 2) |
+| `fpt_ai_enabled = true`, AI call succeeds, slug is valid | AI-classified slug |
+| `fpt_ai_enabled = true`, AI call fails, times out, or returns an invalid slug | Keyword matching (automatic fallback) |
+
+### Worked example
+
+- Listing title: *"Câbles électriques dénudés de section moyenne"* — no exact keyword match for "cuivre" in the title
+- Keyword method (Section 2): falls through to `default` factor (0.50 t CO₂/t) — likely under-credits the batch
+- AI method: classifies the title as `cable` (0.50 t CO₂/t) or `cuivre` (0.141 t CO₂/t) depending on context inferred from "câbles électriques" — the exact slug returned is validated against `fpt_co2_factors()` before use
+
+### Caching
+
+Classification results are cached per normalized title for 24 hours (`fpt_ai_call_cached()`), so republishing similar listings does not generate redundant API calls.
+
+> **Scientific status:** AI classification accuracy has not yet been independently validated against manually-verified batches. Field validation against ground-truth labels is planned for Phase 2 (Section 8).
 
 ---
 
@@ -227,6 +268,37 @@ ERRI = ((Lead diverted kg × 50) + (PM2.5 diverted kg × 10)) × density_multipl
 
 ---
 
+## 5b. Section 2b — Micro-Local Density (AI-Assisted)
+
+### Why a fixed country multiplier is too coarse
+
+The population density multiplier above is applied uniformly across an entire country. This is a reasonable starting approximation, but it ignores intra-country variation: collecting or processing batteries in a dense informal settlement (e.g. Sidi Moumen, Casablanca) carries a materially different child exposure risk than the same activity in a sparsely populated rural area of the same country, even though both currently receive Morocco's single ×1.2 multiplier.
+
+### AI-assisted approach
+
+When the AI module is enabled and a free-text location (city, neighborhood, commune) is available for the batch, `fpt_ai_erri_multiplier()` evaluates that specific location instead of falling back to the country-wide constant. The model is asked to assess population density, the presence of informal residential zones, and the general zone type (industrial, residential, rural, peri-urban) from the location text alone — it does not have access to satellite imagery or official census data.
+
+```
+density_multiplier = fpt_ai_erri_multiplier(location, waste_type)   if AI enabled and location provided
+density_multiplier = fixed country constant (Section 5)              otherwise
+```
+
+The returned multiplier is bounded to the range **0.3 – 2.5** regardless of what the model outputs, to prevent an erroneous response from producing an implausible ERRI value. As with material classification (Section 2b), the AI's output is a single bounded number that feeds into the exact same downstream formula — it does not alter the ERRI formula itself.
+
+### Worked example
+
+- Batch: 200 kg lead batteries, location "Sidi Moumen, Casablanca"
+- Country-wide multiplier (Morocco): ×1.2
+- AI-assessed multiplier for this specific neighborhood (dense informal urban): potentially higher, e.g. ×1.6, reflecting the documented population density of that district relative to the national average
+
+### Fallback
+
+If the AI call fails, the location is empty, or the AI module is disabled, `fpt_get_population_density_multiplier()` falls back to the fixed country-level constants from Section 5 — the same values used since v1.6.0.
+
+> **Scientific status:** this is a transitional, text-based heuristic, not a substitute for the geospatial population density model planned for Phase 2 (distance-decay, actual census/satellite data). It should be read as a refinement of the per-country approximation, not as a clinically validated measurement.
+
+---
+
 ## 6. Dashboard Equivalents
 
 | Indicator | Formula | Source |
@@ -246,11 +318,13 @@ ERRI = ((Lead diverted kg × 50) + (PM2.5 diverted kg × 10)) × density_multipl
 
 ## 8. Phase 2 — ML Refinement
 
-- Random Forest model trained on Morocco + DRC field data
-- Geospatial health model (distance-decay, population density)
-- Extended NLP: Arabic (full), Lingala, Swahili vocabulary expansion
+- Random Forest model trained on Morocco + DRC field data — complements AI classification with a locally-trained statistical model
+- Geospatial health model (distance-decay, population density) — supersedes the text-based AI heuristic from Section 5b with actual census/satellite data
+- Extended NLP: Arabic (full), Lingala, Swahili vocabulary expansion — reduces reliance on AI fallback in low-connectivity deployments
 - Statistical confidence intervals on all estimates
 - External validation with university/NGO partner
+- **Field validation of AI classification accuracy** against manually-verified batches (Section 2b)
+- **Multimodal classification** (title + photo) for batches with ambiguous or minimal text descriptions
 
 ---
 
@@ -275,7 +349,8 @@ ERRI = ((Lead diverted kg × 50) + (PM2.5 diverted kg × 10)) × density_multipl
 | HEI (2020) | healtheffects.org | PM2.5 ERRI coefficient |
 | UNICEF (2020) | unicef.org/reports/toxic-truth | Child lead exposure context |
 | HCP Maroc | hcp.ma | Morocco demographic data |
+| **Anthropic Claude API** | docs.claude.com | AI-assisted material classification (Section 2b) and micro-local density assessment (Section 5b) — model `claude-haiku-4-5` |
 
 ---
 
-*FerayPro Tracer v2.1.0 — Open Source MIT*
+*FerayPro Tracer v2.2.0 — Open Source MIT*
