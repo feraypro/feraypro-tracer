@@ -3,7 +3,7 @@
  * Plugin Name: FerayPro Tracer
  * Plugin URI: https://ma.feraypro.com/impact
  * Description: Traçabilité des lots de déchets recyclés avec calcul CO₂ évité et génération de QR code. Module open source pour UNICEF Venture Fund.
- * Version: 2.0.0
+ * Version: 2.3.0
  * Author: FerayPro
  * License: MIT
  * Text Domain: feraypro-tracer
@@ -11,7 +11,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'FPT_VERSION',    '2.0.0' );
+define( 'FPT_VERSION',    '2.3.0' );
 define( 'FPT_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FPT_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
@@ -19,6 +19,7 @@ define( 'FPT_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 require_once FPT_PLUGIN_DIR . 'modules/finance/finance.php';
 require_once FPT_PLUGIN_DIR . 'modules/stripe/stripe.php';
 require_once FPT_PLUGIN_DIR . 'modules/ai/ai.php';
+require_once FPT_PLUGIN_DIR . 'modules/ai/ai-buyer-matching.php';
 
 // ─── Normalisation texte multilingue ─────────────────────────────────────────
 // Supporte FR, EN + translittérations Darija, Lingala, Swahili de base
@@ -2851,9 +2852,12 @@ function fpt_shortcode_dashboard( $atts ) {
 
 // ─── CSS frontend + admin ──────────────────────────────────────────────────────
 add_action( 'wp_enqueue_scripts',    'fpt_enqueue_styles' );
-add_action( 'admin_enqueue_scripts', 'fpt_enqueue_styles' );
+add_action( 'admin_enqueue_scripts', 'fpt_enqueue_admin_styles' );
 function fpt_enqueue_styles() {
+    // tracer.css (lot card, dashboard public, blocs inline) — front-end uniquement.
     wp_enqueue_style( 'feraypro-tracer', FPT_PLUGIN_URL . 'tracer.css', [], FPT_VERSION );
+}
+function fpt_enqueue_admin_styles() {
     // CSS admin FerayPro — injecté uniquement sur les pages du plugin
     if ( isset( $_GET['page'] ) && strpos( $_GET['page'], 'feraypro' ) === 0 ) {
         wp_enqueue_style( 'fpt-admin', FPT_PLUGIN_URL . 'modules/admin/admin.css', [], FPT_VERSION );

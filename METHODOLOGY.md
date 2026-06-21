@@ -1,7 +1,7 @@
 # FerayPro Tracer — Calculation Methodology
 
 **Last updated:** 2026  
-**Version:** 2.2.0  
+**Version:** 2.3.0  
 **License:** MIT  
 
 ---
@@ -27,10 +27,11 @@ Source: FEDEREC/ADEME ACV 2017. This is the scientifically rigorous approach val
 5. [Section 1b — CO₂ Process Adjustment (Grid Intensity)](#4-section-1b--co₂-process-adjustment-grid-intensity)
 6. [Section 2 — Child Health Impact (ERRI)](#5-section-2--child-health-impact-erri)
 7. [Section 2b — Micro-Local Density (AI-Assisted)](#5b-section-2b--micro-local-density-ai-assisted)
-8. [Dashboard Equivalents](#6-dashboard-equivalents)
-9. [Limitations & Validation Status](#7-limitations--validation-status)
-10. [Phase 2 — ML Refinement](#8-phase-2--ml-refinement)
-11. [All Sources](#9-all-sources)
+8. [Section 3 — Buyer Matching Triangulation (AI-Assisted)](#5c-section-3--buyer-matching-triangulation-ai-assisted)
+9. [Dashboard Equivalents](#6-dashboard-equivalents)
+10. [Limitations & Validation Status](#7-limitations--validation-status)
+11. [Phase 2 — ML Refinement](#8-phase-2--ml-refinement)
+12. [All Sources](#9-all-sources)
 
 ---
 
@@ -299,6 +300,60 @@ If the AI call fails, the location is empty, or the AI module is disabled, `fpt_
 
 ---
 
+## 5c. Section 3 — Buyer Matching Triangulation (AI-Assisted)
+
+### Why this needs triangulation, not a lookup
+
+Ranking partner buyers for a given batch requires combining three location signals that don't share a common format:
+
+| Source | Location data shape |
+|--------|---------------------|
+| Seller listing | One location (e.g. "Paris, 93") |
+| "Prix du jour" price table | A region hint per buyer per sub-type (e.g. "Aquitaine", "Île-de-France") |
+| "Acheteurs réguliers" buyer listing | A free-text list of facility site names, sometimes 25+ per buyer, named individually rather than by city |
+
+None of these is a structured address or a coordinate pair. A literal string match resolves the easy cases (seller and buyer share an explicit city name); everything else requires inference from place names, regional hints, and general geography — which is what the AI step provides.
+
+### Principle: AI estimates location, PHP ranks deterministically
+
+Same separation of concerns as Sections 2b and 5b:
+
+```
+AI responsibility   : seller location + buyer site names + region hint  →  proximity tier + approximate distance (km)
+PHP responsibility  : tier + distance + price  →  sorted ranking (deterministic comparator)
+```
+
+The AI never decides the final order. It returns, per buyer, a tier from a closed enum (`meme_quartier` / `meme_ville` / `meme_region` / `region_differente` / `pays_different` / `inconnu`) and an approximate distance, both validated before use. The sort itself — tier ascending, then distance ascending, then Net Vendor price descending as the final tiebreaker — is plain PHP `usort()`, fully deterministic and auditable.
+
+### Two-tier resolution: rule first, AI only when needed
+
+1. **Free PHP rule** (`fpt_bm_rule_match_location()`) — literal substring match between the seller's location and any of the buyer's registered sites (accent- and hyphen-normalized). When it hits: instant, free, 100% certain — no AI call for that buyer.
+2. **AI estimate** (`fpt_ai_estimate_buyer_distances()`) — only for buyers the rule could not resolve, batched into a single call per lot. The model is explicitly instructed to return `tier: "inconnu"` and low confidence rather than invent a precise distance for a place name it cannot locate with reasonable certainty.
+
+### Worked example
+
+- Lot: *Cuivre Mêlé*, seller located in **Paris, 93**
+- Matched sub-type offers (from "Prix du jour"):
+
+  | Acheteur | Région (indice) | Prix net vendeur |
+  |----------|------------------|-------------------|
+  | City Débarras | Île-de-France | 6,80 €/kg |
+  | MP Métaux | Île-de-France | 6,48 €/kg |
+  | Groupe Péna | Aquitaine | 7,20 €/kg |
+  | G2D2 | Région lyonnaise | 6,08 €/kg |
+
+- City Débarras has a registered site containing "Paris" → **rule match**, tier `meme_ville`, 0 km, no AI call needed
+- The other three have no literal match → sent to the batched AI distance call, which returns `meme_region` for MP Métaux (Île-de-France ≈ Paris region) and `region_differente` for Groupe Péna (Aquitaine) and G2D2 (Lyon region)
+- Final ranking: **City Débarras** first despite a lower price than Groupe Péna — location outranks price by design; among the `region_differente` buyers, price decides
+
+### Fallback
+
+If the AI module is disabled, the API call fails, or no seller location is available, buyers the literal rule cannot resolve are returned with `tier: "inconnu"` and no distance. They still appear in the ranking — price stays visible — but sort after every buyer with a known location. Nothing is silently dropped.
+
+> **Scientific status:** distance and proximity-tier estimates are an AI-based geographic heuristic drawn from the model's general training knowledge — not a routing or geocoding calculation, since the project has no Maps/geocoding API key. Reliable for distinguishing "same region" from "opposite side of the country," materially less precise for separating two nearby sites of the same buyer. Each ranked row carries a confidence flag (`high` / `medium` / `low`) in the admin UI for human sanity-check before a sourcing decision. Phase 2 (Section 8) plans to replace this heuristic with an actual geocoding/routing API once buyer site addresses are captured as structured data.
+
+---
+
 ## 6. Dashboard Equivalents
 
 | Indicator | Formula | Source |
@@ -325,6 +380,7 @@ If the AI call fails, the location is empty, or the AI module is disabled, `fpt_
 - External validation with university/NGO partner
 - **Field validation of AI classification accuracy** against manually-verified batches (Section 2b)
 - **Multimodal classification** (title + photo) for batches with ambiguous or minimal text descriptions
+- **Real geocoding/routing API for buyer matching** (Section 5c) — replaces the AI-estimated distance heuristic with actual road-network distances once buyer site addresses are structured data instead of free text
 
 ---
 
@@ -349,8 +405,8 @@ If the AI call fails, the location is empty, or the AI module is disabled, `fpt_
 | HEI (2020) | healtheffects.org | PM2.5 ERRI coefficient |
 | UNICEF (2020) | unicef.org/reports/toxic-truth | Child lead exposure context |
 | HCP Maroc | hcp.ma | Morocco demographic data |
-| **Anthropic Claude API** | docs.claude.com | AI-assisted material classification (Section 2b) and micro-local density assessment (Section 5b) — model `claude-haiku-4-5` |
+| **Anthropic Claude API** | docs.claude.com | AI-assisted material classification (Section 2b), micro-local density assessment (Section 5b), and buyer location triangulation (Section 5c) — model `claude-haiku-4-5` |
 
 ---
 
-*FerayPro Tracer v2.2.0 — Open Source MIT*
+*FerayPro Tracer v2.3.0 — Open Source MIT*

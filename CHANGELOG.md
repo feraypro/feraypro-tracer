@@ -5,6 +5,35 @@ Format: [Keep a Changelog](https://keepachangelog.com) · [Semantic Versioning](
 
 ---
 
+## [2.3.0] — 2026
+
+### Added
+- **Module Matching Acheteurs** — `modules/ai/ai-buyer-matching.php`
+  - Pour chaque lot "Annonces déchets" publié, calcule automatiquement un classement des acheteurs partenaires pertinents à partir de la fiche **Prix du jour** correspondante
+  - **Pipeline en 3 étapes** :
+    1. IA : identifie le sous-type de matière dans le tableau de prix (texte libre, plusieurs sous-types par fiche — ex. "Cuivre Mêlé" vs "Cuivre dénudé neuf Millberry") et extrait la liste acheteur/prix de la section correspondant au lot
+    2. PHP : résout chaque nom d'acheteur vers sa fiche HivePress *Acheteurs réguliers* (match exact normalisé puis flou `similar_text()`, seuil 65%) et récupère tous ses sites depuis le champ "Votre Ville + votre Quartier" (multi-valeurs, un acheteur peut avoir 25+ sites)
+    3. Localisation : **règle PHP gratuite** (correspondance littérale vendeur ↔ site, tirets/espaces normalisés) en priorité ; **IA en complément** uniquement pour les acheteurs non résolus par la règle, avec consigne explicite de répondre "localisation inconnue" plutôt que d'inventer une distance
+  - **Tri par pertinence** : localisation prioritaire (tier de proximité croissant : même quartier → même ville → même région → région différente → pays différent → inconnu), prix Net Vendeur en départage uniquement à distance égale/proche — comportement vérifié par tests unitaires
+  - Metabox admin **"🎯 Classement Acheteurs (IA)"** sur la fiche du lot : tableau classé avec lien direct vers chaque fiche acheteur, niveau de confiance par ligne, bouton **🔄 Recalculer** (AJAX, bypass cache)
+  - Déclenchement automatique à la publication/MAJ du lot (priorité 40, après les hooks CO₂ et description IA du module principal) + recalcul manuel à la demande
+  - **Cache transient** : 12h sur l'extraction du tableau de prix (invalidé automatiquement dès que son contenu change), 24h sur les estimations de distance
+  - Réutilise le toggle existant `fpt_ai_enabled` — **aucun nouveau réglage admin requis**
+  - **Architecture non-invasive** : récupère l'ID de la fiche "Prix du jour" via `url_to_postid()` sur le permalink déjà retourné par `fpt_get_prix_du_jour()` — zéro modification du plugin principal ou du module IA existant
+
+- **Nouveau meta key WordPress**
+
+  | Meta key | Type | Description |
+  |----------|------|--------------|
+  | `_fpt_buyer_ranking` | string (JSON) | Classement des acheteurs pour ce lot : sous-type matché, offres triées (acheteur, fiche liée, site le plus proche, tier de proximité, distance estimée km, confiance, prix net vendeur), horodatage de calcul |
+
+### Notes
+- **Rétrocompatibilité totale** : module purement additif, n'agit que si `fpt_ai_enabled = true`. Aucune fonction existante modifiée
+- **Limite connue, assumée et affichée dans l'admin** : les distances sont des estimations IA basées sur la connaissance géographique générale du modèle (villes, départements, régions) — pas un calcul d'itinéraire réel, le projet ne disposant pas de clé Google Maps/API de géocodage. Fiable pour distinguer "même région" d'une "région opposée du pays", moins précis pour départager deux sites très proches d'un même acheteur. Chaque ligne du classement affiche son niveau de confiance pour validation humaine avant décision
+- Installation : ajouter `require_once FPT_PLUGIN_DIR . 'modules/ai/ai-buyer-matching.php';` à la suite des autres `require_once` dans `feraypro-tracer.php` (aucune autre modification)
+
+---
+
 ## [2.2.0] — 2026
 
 ### Added

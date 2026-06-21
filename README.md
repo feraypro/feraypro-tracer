@@ -5,7 +5,7 @@
 Automatically calculates CO₂ avoided, child health impact, commission invoicing, Stripe online payment, and financial reporting for every recycled waste batch. Built for [FerayPro Morocco](https://ma.feraypro.com), [FerayPro DRC](https://cd.feraypro.com), [FerayPro France](https://fr.feraypro.com), and [FerayPro USA](https://feraypro.com) — a circular waste marketplace operating globally.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.2.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.3.0-blue.svg)](CHANGELOG.md)
 [![UNICEF Venture Fund](https://img.shields.io/badge/UNICEF-Venture%20Fund%202026-00aeef.svg)](https://unicefinnovationfund.org)
 
 ---
@@ -25,7 +25,8 @@ feraypro-tracer/
 │   ├── stripe/
 │   │   └── stripe.php           ← Module paiement Stripe
 │   └── ai/
-│       └── ai.php               ← Module Intelligence Artificielle (classification, ERRI, prix, descriptions)
+│       ├── ai.php                       ← Module Intelligence Artificielle (classification, ERRI, prix, descriptions)
+│       └── ai-buyer-matching.php        ← Module Matching Acheteurs (classement par localisation + prix)
 ├── CHANGELOG.md
 └── README.md
 ```
@@ -60,6 +61,7 @@ When a seller publishes a waste listing on HivePress / ListingHive, the plugin a
 9. **Tracks marketing partner referrals** via `?ref=` cookie system
 10. **Reports financial KPIs** via the Finance Dashboard module
 11. **Matches today's prices semantically** via AI when keyword scoring finds no match — and **auto-generates a professional listing description** from minimal user input, when the AI module is enabled
+12. **Ranks partner buyers by relevance** for each waste listing — location first, price as tiebreaker — by cross-referencing the matched "Today's Prices" sheet with each buyer's registered sites, when the AI module is enabled
 
 ---
 
@@ -68,15 +70,6 @@ When a seller publishes a waste listing on HivePress / ListingHive, the plugin a
 ### Philosophy — AI classifies, PHP calculates
 
 The AI module never computes CO₂, ERRI, or prices itself. It only returns a **classification input** — a validated material slug, a density multiplier, or a matched price reference — which the existing deterministic PHP logic then turns into a number. This keeps every calculation auditable against `fpt_co2_factors()` and the official sources, regardless of whether the classification came from a keyword match or an AI call.
-
-### What it solves
-
-| Limitation of the rigid approach | AI-powered solution |
-|-----------------------------------|----------------------|
-| `strpos()` misses synonyms, typos, and implicit descriptions ("câbles dénudés de section moyenne" without the word "cuivre") | Claude classifies based on context, returning one of the validated slugs from `fpt_co2_factors()` |
-| Fixed density multiplier per country (Morocco ×1.2 for the whole country) ignores neighborhood-level reality | `fpt_ai_erri_multiplier()` evaluates the actual zone (dense informal settlement vs. rural) from free-text location |
-| Price matching via word overlap fails on synonyms or grade variants ("Cuivre Millberry" vs. "Cuivre standard") | `fpt_ai_match_price()` finds the semantically closest price reference, even across languages or grades |
-| Listings with minimal input ("vieux cables") look unprofessional to industrial buyers | `fpt_ai_generate_description()` produces a structured listing with the calculated CO₂ argument included |
 
 ### Four modules
 
@@ -92,6 +85,41 @@ Every AI function falls back to the original logic (`strpos()`, `similar_text()`
 ### Setup
 
 FP Tracer → ⚙️ Paramètres → 🤖 Intelligence Artificielle. Enable the checkbox, paste an [Anthropic API key](https://console.anthropic.com), test the connection. Model used: `claude-haiku-4-5` — estimated cost ~$0.001 per listing processed.
+
+---
+
+## 🎯 Buyer Matching Module (v2.3.0)
+
+### What it does
+
+For every published "Annonces déchets" listing, the module builds a **ranked list of partner buyers** directly in the listing's admin edit screen — answering "which buyer should this seller actually call first?"
+
+It cross-references three different data shapes that don't naturally line up:
+
+| Source | Location data shape |
+|--------|---------------------|
+| Seller listing | One location ("Paris, 93") |
+| "Prix du jour" price table | A region hint per buyer per sub-type ("Aquitaine", "Île-de-France") |
+| "Acheteurs réguliers" buyer listing | A free-text list of facility site names, sometimes 25+ per buyer (e.g. a buyer network like DECONS) |
+
+### Pipeline
+
+1. **AI extraction** — identifies which sub-type section of the (often multi-section, free-text) price table matches the listing, and extracts that section's buyer/price offers as structured JSON
+2. **Buyer resolution** (pure PHP, no AI) — matches each extracted buyer name to its *Acheteurs réguliers* listing (exact normalized match, then fuzzy `similar_text()`), and reads all of that buyer's registered sites
+3. **Location triangulation** — a free PHP rule checks for literal seller↔site matches first (instant, 100% reliable when it hits); only buyers left unresolved are sent to a single batched AI call that estimates a proximity tier and approximate distance, with explicit instructions to return "unknown" rather than invent a precise figure for an unrecognizable place name
+4. **Ranking** — sorted by proximity tier first, then distance, with Net Vendor price as the tiebreaker only at equal/near-equal location — verified by unit tests
+
+### Fallback & cost control
+
+Same guarantee as the rest of the AI module: gated entirely behind `fpt_ai_enabled`, results cached (12h price extraction, 24h distances, invalidated automatically when source content changes), and the deterministic location rule short-circuits the AI call whenever a literal match is found — minimizing both API cost and the risk of AI misjudgment on the data that's actually unambiguous.
+
+### Known limitation
+
+Distances are **AI estimates** drawn from the model's general geographic knowledge — not a routing calculation, since the project has no Google Maps/geocoding API key. Reliable for "same region" vs. "opposite side of the country," less precise for separating two nearby sites of the same buyer. Every row in the admin table shows a confidence level so the team can sanity-check before deciding.
+
+### Setup
+
+No new settings — reuses `fpt_ai_enabled`. Just `require_once` the module from `feraypro-tracer.php`; the metabox appears automatically on every "Annonces déchets" listing.
 
 ---
 
@@ -253,6 +281,7 @@ add_action('template_redirect', function() {
 | `_fpt_ai_source` | string | Origine du calcul CO₂ : `ai` ou `fallback` |
 | `_fpt_ai_tags` | array | Tags SEO générés pour la description automatique |
 | `_fpt_ai_eco_arg` | string | Argument environnemental généré par l'IA (1 phrase) |
+| `_fpt_buyer_ranking` | string (JSON) | Classement des acheteurs partenaires pour ce lot : sous-type matché, offres triées (acheteur, fiche liée, site le plus proche, tier de proximité, distance estimée, confiance, prix net vendeur), horodatage |
 
 ---
 
@@ -269,7 +298,7 @@ add_action('template_redirect', function() {
 
 ## 🗺️ Roadmap
 
-### Phase 1 — MVP (Current — v2.2.0)
+### Phase 1 — MVP (Current — v2.3.0)
 - [x] CO₂ net gain engine (200+ materials, FR + EN + Darija/Lingala/Swahili NLP)
 - [x] CO₂ process factors for buyer dashboard (FEDEREC/ADEME LCA 2017)
 - [x] **Grid intensity adjustment** — CO₂ process scaled to local electricity mix (IEA 2024 / EPA eGRID 2023 / ONEE-MASEN 2024) — 35+ countries
@@ -287,19 +316,13 @@ add_action('template_redirect', function() {
 - [x] Architecture modulaire (`modules/`)
 - [x] **Stripe online payment** — Checkout Session + webhook auto-confirmation
 - [x] **AI module** — material classification, micro-local ERRI, semantic price matching, auto-generated descriptions (Claude Haiku, systematic fallback to keyword logic)
+- [x] **Buyer matching module** — ranks partner buyers per listing by location proximity (tier) then price, triangulating seller location, price-table region hints, and buyer multi-site listings (Claude Haiku, deterministic rule-based location match first, AI fallback for the rest)
 
-### Phase 2 — ML Refinement (2026–2027)
-- [ ] Random Forest model (Morocco + DRC field data) — complements AI classification with a locally-trained statistical model
-- [ ] Statistical confidence intervals on CO₂ factors
-- [ ] Geospatial impact map — pairs with micro-local ERRI for neighborhood-level visualization
-- [ ] Full Arabic, Lingala, Swahili keyword vocabularies (reduces reliance on AI fallback for low-connectivity sites)
-- [ ] TF-IDF fallback classification (offline-capable alternative when AI/network is unavailable)
-- [ ] Export API for governments/NGOs
-- [ ] GitHub auto-update across all country sites
-- [ ] Transient cache for finance dashboard (large datasets)
-- [ ] Stripe multi-currency native (MAD via local acquirer)
-- [ ] Field validation of AI classification accuracy against manually-verified batches
-- [ ] Multimodal classification (title + photo) for ambiguous listings
+### Next (no fixed timeline)
+- [ ] **Real geocoding for buyer matching** — replace AI-estimated distances with an actual geocoding/routing API (e.g. Google Maps Distance Matrix) once site addresses are structured, for precision on close-call rankings
+- [ ] **Stripe multi-currency native** — MAD via local acquirer, removes the current EUR fallback
+- [ ] **GitHub auto-update** across all country sites
+- [ ] **Full Arabic, Lingala, Swahili keyword vocabularies** — reduces reliance on AI fallback for low-connectivity sites
 
 ---
 
@@ -331,7 +354,7 @@ MIT License — Copyright (c) 2026 FerayPro
 ## 🏷️ Citation
 
 ```
-FerayPro Tracer v2.2.0 (2026). Open-source waste batch traceability plugin.
+FerayPro Tracer v2.3.0 (2026). Open-source waste batch traceability plugin.
 MIT License. https://github.com/feraypro/feraypro-tracer
 ```
 
