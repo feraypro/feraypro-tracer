@@ -10,28 +10,28 @@ Automatically calculates CO₂ avoided, child health impact, commission invoicin
 
 ---
 
-## 📁 Structure du plugin
+## 📁 Plugin Structure
 
 ```
 feraypro-tracer/
-├── feraypro-tracer.php          ← Plugin principal (CO₂, lots, factures, partenaires)
-├── tracer.css                   ← Styles publics (blocs inline, lot card, dashboard CO₂)
+├── feraypro-tracer.php          ← Main plugin file (CO₂, batches, invoices, partners)
+├── tracer.css                   ← Public styles (inline blocks, lot card, CO₂ dashboard)
 ├── modules/
 │   ├── admin/
-│   │   └── admin.css            ← Styles du panneau d'administration
+│   │   └── admin.css            ← Admin panel styles
 │   ├── finance/
-│   │   ├── finance.php          ← Module dashboard financier [fpt_dashboard_finance]
-│   │   └── finance.css          ← Styles du dashboard financier
+│   │   ├── finance.php          ← Financial dashboard module [fpt_dashboard_finance]
+│   │   └── finance.css          ← Financial dashboard styles
 │   ├── stripe/
-│   │   └── stripe.php           ← Module paiement Stripe
+│   │   └── stripe.php           ← Stripe payment module
 │   └── ai/
-│       ├── ai.php                       ← Module Intelligence Artificielle (classification, ERRI, prix, descriptions)
-│       └── ai-buyer-matching.php        ← Module Matching Acheteurs (classement par localisation + prix)
+│       ├── ai.php                       ← AI module (classification, ERRI, prices, descriptions)
+│       └── ai-buyer-matching.php        ← Buyer matching module (ranked by location + price)
 ├── CHANGELOG.md
 └── README.md
 ```
 
-> **Architecture modulaire** : `feraypro-tracer.php` charge automatiquement tous les modules via `require_once` au démarrage. Ajouter un module = créer un dossier dans `modules/` et l'enregistrer dans le `require_once` du plugin principal. Les modules communiquent avec le plugin principal via des `do_action` hooks — aucune modification invasive du core.
+> **Modular architecture**: `feraypro-tracer.php` loads all modules via `require_once` at startup. Adding a module = create a folder under `modules/` and register it with a `require_once` in the main plugin file. Modules communicate with the core via `do_action` hooks — no invasive changes to the core required.
 
 ---
 
@@ -84,7 +84,7 @@ Every AI function falls back to the original logic (`strpos()`, `similar_text()`
 
 ### Setup
 
-FP Tracer → ⚙️ Paramètres → 🤖 Intelligence Artificielle. Enable the checkbox, paste an [Anthropic API key](https://console.anthropic.com), test the connection. Model used: `claude-haiku-4-5` — estimated cost ~$0.001 per listing processed.
+FP Tracer → ⚙️ Settings → 🤖 Artificial Intelligence. Enable the checkbox, paste an [Anthropic API key](https://console.anthropic.com), test the connection. Model used: `claude-haiku-4-5` — estimated cost ~$0.001 per listing processed.
 
 ---
 
@@ -92,20 +92,20 @@ FP Tracer → ⚙️ Paramètres → 🤖 Intelligence Artificielle. Enable the 
 
 ### What it does
 
-For every published "Annonces déchets" listing, the module builds a **ranked list of partner buyers** directly in the listing's admin edit screen — answering "which buyer should this seller actually call first?"
+For every published waste listing, the module builds a **ranked list of partner buyers** directly in the listing's admin edit screen — answering "which buyer should this seller actually call first?"
 
 It cross-references three different data shapes that don't naturally line up:
 
 | Source | Location data shape |
 |--------|---------------------|
 | Seller listing | One location ("Paris, 93") |
-| "Prix du jour" price table | A region hint per buyer per sub-type ("Aquitaine", "Île-de-France") |
-| "Acheteurs réguliers" buyer listing | A free-text list of facility site names, sometimes 25+ per buyer (e.g. a buyer network like DECONS) |
+| "Today's Prices" price table | A region hint per buyer per sub-type ("Aquitaine", "Île-de-France") |
+| "Regular Buyers" buyer listing | A free-text list of facility site names, sometimes 25+ per buyer (e.g. a buyer network like DECONS) |
 
 ### Pipeline
 
 1. **AI extraction** — identifies which sub-type section of the (often multi-section, free-text) price table matches the listing, and extracts that section's buyer/price offers as structured JSON
-2. **Buyer resolution** (pure PHP, no AI) — matches each extracted buyer name to its *Acheteurs réguliers* listing (exact normalized match, then fuzzy `similar_text()`), and reads all of that buyer's registered sites
+2. **Buyer resolution** (pure PHP, no AI) — matches each extracted buyer name to its Regular Buyers listing (exact normalized match, then fuzzy `similar_text()`), and reads all of that buyer's registered sites
 3. **Location triangulation** — a free PHP rule checks for literal seller↔site matches first (instant, 100% reliable when it hits); only buyers left unresolved are sent to a single batched AI call that estimates a proximity tier and approximate distance, with explicit instructions to return "unknown" rather than invent a precise figure for an unrecognizable place name
 4. **Ranking** — sorted by proximity tier first, then distance, with Net Vendor price as the tiebreaker only at equal/near-equal location — verified by unit tests
 
@@ -134,17 +134,17 @@ No new settings — reuses `fpt_ai_enabled`. Just `require_once` the module from
 | `[fpt_acheteur id="XXX"]` | Buyer dashboard — CO₂ produced by recycling |
 | `[fpt_partenaires]` | Public partner grid — logos, batch count, CO₂ avoided per partner |
 
-### `[fpt_dashboard_finance]` — Paramètres
+### `[fpt_dashboard_finance]` — Parameters
 
-| Paramètre | Valeurs | Défaut | Description |
-|-----------|---------|--------|-------------|
-| `period` | `0`, `7`, `30`, `90`, `365` | `30` | Fenêtre temporelle en jours. `0` = depuis le début. |
-| `lang` | `fr`, `en` | auto | Langue. Vide = détection automatique par domaine. |
+| Parameter | Values | Default | Description |
+|-----------|--------|---------|-------------|
+| `period` | `0`, `7`, `30`, `90`, `365` | `30` | Time window in days. `0` = all time. |
+| `lang` | `fr`, `en` | auto | Language. Empty = auto-detected from domain. |
 
 ```
-[fpt_dashboard_finance]                          ← 30 derniers jours, langue auto
-[fpt_dashboard_finance period="0"]               ← tout l'historique
-[fpt_dashboard_finance period="365" lang="en"]   ← année en cours, anglais
+[fpt_dashboard_finance]                          ← last 30 days, auto language
+[fpt_dashboard_finance period="0"]               ← full history
+[fpt_dashboard_finance period="365" lang="en"]   ← current year, English
 ```
 
 ---
@@ -153,14 +153,14 @@ No new settings — reuses `fpt_ai_enabled`. Just `require_once` the module from
 
 When admin confirms a batch collection:
 
-1. Admin enters the **lot price** in the collection metabox
+1. Admin enters the **batch price** in the collection metabox
 2. The plugin calculates the **80/20 split** automatically:
    - Vendor receives **80%** directly from buyer
    - FerayPro receives **20%** commission from buyer
    - If a marketing partner referred the vendor: **10%** goes to partner, **10%** stays FerayPro
-3. Admin clicks **"📄 Ouvrir / Imprimer la facture PDF"** — a full A4 invoice opens
-4. Invoice includes: lot details, price breakdown, TVA, IBAN/Mobile Money **and Stripe payment button**
-5. Commission is confirmed automatically via Stripe webhook, or manually via **"💰 Marquer comme payée"**
+3. Admin clicks **"📄 Open / Print PDF Invoice"** — a full A4 invoice opens
+4. Invoice includes: batch details, price breakdown, VAT, IBAN/Mobile Money **and Stripe payment button**
+5. Commission is confirmed automatically via Stripe webhook, or manually via **"💰 Mark as paid"**
 
 ---
 
@@ -169,15 +169,15 @@ When admin confirms a batch collection:
 ### How it works
 
 1. Buyer opens the invoice link (shared by admin)
-2. Clicks **"💳 Payer [amount] en ligne"**
+2. Clicks **"💳 Pay [amount] online"**
 3. Redirected to a Stripe-hosted Checkout page (card, Apple Pay, Google Pay…)
 4. On success → Stripe sends a webhook to the site
 5. Plugin automatically sets `_fpt_commission_paid = 'paid'` — no admin action needed
 
 ### Setup (3 steps)
 
-**Step 1 — Enter your Stripe keys**  
-Go to FP Tracer → ⚙️ Paramètres → 💳 Stripe. Enter your test or live API keys.
+**Step 1 — Enter your Stripe keys**
+Go to FP Tracer → ⚙️ Settings → 💳 Stripe. Enter your test or live API keys.
 
 **Step 2 — Configure the webhook in Stripe Dashboard**
 ```
@@ -187,7 +187,7 @@ Event   : checkout.session.completed
 ```
 Copy the **Signing secret** (`whsec_...`) back into FP Tracer settings.
 
-**Step 3 — Switch to Live when ready**  
+**Step 3 — Switch to Live when ready**
 Toggle Mode from `Test` → `Live` and enter your live keys.
 
 ### Currency support
@@ -219,7 +219,7 @@ Expiry : 12/34   CVC : 123
 ### Installation
 
 1. Upload the `feraypro-tracer/` folder to `wp-content/plugins/`
-2. Activate → go to **FP Tracer → ⚙️ Paramètres**
+2. Activate → go to **FP Tracer → ⚙️ Settings**
 3. Create pages with shortcodes:
    - Environmental: `[fpt_dashboard]`
    - Financial: `[fpt_dashboard_finance]` *(protect with `manage_options` role)*
@@ -256,43 +256,43 @@ add_action('template_redirect', function() {
 
 ---
 
-## 🗝️ Meta Keys WordPress
+## 🗝️ WordPress Meta Keys
 
 | Meta key | Type | Description |
 |----------|------|-------------|
-| `_fpt_co2_avoided` | float | CO₂ évité (tonnes) |
-| `_fpt_lot_id` | string | Batch ID public `FP-XXXXXXXX` |
-| `_fpt_traced_at` | datetime | Date de tracé |
-| `_fpt_collected` | `'1'` | Lot collecté |
-| `_fpt_collected_date` | datetime | Date de collecte |
-| `_fpt_acheteur_id` | int | ID post acheteur |
-| `_fpt_prix_lot` | float | Prix de vente |
-| `_fpt_commission_paid` | `'paid'` | Commission payée |
-| `_fpt_commission_paid_date` | date | Date du paiement |
-| `_fpt_invoice_number` | string | N° facture `FP-INV-YYYYMM-ID` |
-| `_fpt_ref` | string | Slug partenaire référent |
-| `_fpt_co2_transport` | float | CO₂ transport (tonnes) |
-| `_fpt_co2_total` | float | CO₂ total (matière + transport) |
-| `_fpt_stripe_session_id` | string | ID Checkout Session Stripe |
-| `_fpt_stripe_payment_intent` | string | ID Payment Intent confirmé |
-| `_fpt_stripe_paid_at` | int | Timestamp confirmation webhook |
-| `_fpt_ai_slug` | string | Slug matière retourné par l'IA (validé contre `fpt_co2_factors()`) |
-| `_fpt_ai_confidence` | string | Confiance de la classification IA : `high` / `medium` / `low` |
-| `_fpt_ai_source` | string | Origine du calcul CO₂ : `ai` ou `fallback` |
-| `_fpt_ai_tags` | array | Tags SEO générés pour la description automatique |
-| `_fpt_ai_eco_arg` | string | Argument environnemental généré par l'IA (1 phrase) |
-| `_fpt_buyer_ranking` | string (JSON) | Classement des acheteurs partenaires pour ce lot : sous-type matché, offres triées (acheteur, fiche liée, site le plus proche, tier de proximité, distance estimée, confiance, prix net vendeur), horodatage |
+| `_fpt_co2_avoided` | float | CO₂ avoided (tonnes) |
+| `_fpt_lot_id` | string | Public batch ID `FP-XXXXXXXX` |
+| `_fpt_traced_at` | datetime | Tracing date |
+| `_fpt_collected` | `'1'` | Batch collected |
+| `_fpt_collected_date` | datetime | Collection date |
+| `_fpt_acheteur_id` | int | Buyer post ID |
+| `_fpt_prix_lot` | float | Sale price |
+| `_fpt_commission_paid` | `'paid'` | Commission paid |
+| `_fpt_commission_paid_date` | date | Payment date |
+| `_fpt_invoice_number` | string | Invoice number `FP-INV-YYYYMM-ID` |
+| `_fpt_ref` | string | Referring partner slug |
+| `_fpt_co2_transport` | float | Transport CO₂ (tonnes) |
+| `_fpt_co2_total` | float | Total CO₂ (material + transport) |
+| `_fpt_stripe_session_id` | string | Stripe Checkout Session ID |
+| `_fpt_stripe_payment_intent` | string | Confirmed Payment Intent ID |
+| `_fpt_stripe_paid_at` | int | Webhook confirmation timestamp |
+| `_fpt_ai_slug` | string | Material slug returned by AI (validated against `fpt_co2_factors()`) |
+| `_fpt_ai_confidence` | string | AI classification confidence: `high` / `medium` / `low` |
+| `_fpt_ai_source` | string | CO₂ calculation source: `ai` or `fallback` |
+| `_fpt_ai_tags` | array | SEO tags generated for the auto-description |
+| `_fpt_ai_eco_arg` | string | Environmental argument generated by AI (1 sentence) |
+| `_fpt_buyer_ranking` | string (JSON) | Ranked buyer list for this batch: matched sub-type, sorted offers (buyer, linked listing, closest site, proximity tier, estimated distance, confidence, net vendor price), timestamp |
 
 ---
 
 ## 🔗 WordPress Hooks (extensibility)
 
-| Hook | Type | Paramètres | Description |
-|------|------|-----------|-------------|
-| `fpt_admin_settings_extra_cards` | action | — | Injecte des cartes dans les réglages admin |
-| `fpt_invoice_payment_methods` | action | `$lot_id`, `$comm20_ttc` | Injecte des modes de paiement dans la facture |
-| `fpt_metabox_after_commission` | action | `$post_id` | Injecte du contenu après le bloc commission dans la metabox |
-| `fpt_before_co2_save` | action | `$post_id`, `$titre` | Déclenché avant le calcul CO₂ — le module IA s'y accroche pour classifier la matière et écrire `_fpt_ai_slug` |
+| Hook | Type | Parameters | Description |
+|------|------|------------|-------------|
+| `fpt_admin_settings_extra_cards` | action | — | Injects cards into the admin settings page |
+| `fpt_invoice_payment_methods` | action | `$lot_id`, `$comm20_ttc` | Injects payment methods into the invoice |
+| `fpt_metabox_after_commission` | action | `$post_id` | Injects content after the commission block in the metabox |
+| `fpt_before_co2_save` | action | `$post_id`, `$titre` | Fired before CO₂ calculation — the AI module hooks here to classify the material and write `_fpt_ai_slug` |
 
 ---
 
@@ -313,7 +313,7 @@ add_action('template_redirect', function() {
 - [x] Partner affiliate tracking — `?ref=` cookie, banner, admin dashboard
 - [x] Commission & invoicing module — 20% FP / 80% vendor / 10% partner, PDF A4
 - [x] Financial dashboard `[fpt_dashboard_finance]`
-- [x] Architecture modulaire (`modules/`)
+- [x] Modular architecture (`modules/`)
 - [x] **Stripe online payment** — Checkout Session + webhook auto-confirmation
 - [x] **AI module** — material classification, micro-local ERRI, semantic price matching, auto-generated descriptions (Claude Haiku, systematic fallback to keyword logic)
 - [x] **Buyer matching module** — ranks partner buyers per listing by location proximity (tier) then price, triangulating seller location, price-table region hints, and buyer multi-site listings (Claude Haiku, deterministic rule-based location match first, AI fallback for the rest)

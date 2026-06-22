@@ -30,7 +30,7 @@ Source: FEDEREC/ADEME ACV 2017. This is the scientifically rigorous approach val
 8. [Section 3 — Buyer Matching Triangulation (AI-Assisted)](#5c-section-3--buyer-matching-triangulation-ai-assisted)
 9. [Dashboard Equivalents](#6-dashboard-equivalents)
 10. [Limitations & Validation Status](#7-limitations--validation-status)
-11. [Phase 2 — ML Refinement](#8-phase-2--ml-refinement)
+11. [Next Steps](#8-next-steps)
 12. [All Sources](#9-all-sources)
 
 ---
@@ -371,16 +371,12 @@ If the AI module is disabled, the API call fails, or no seller location is avail
 
 ---
 
-## 8. Phase 2 — ML Refinement
+## 8. Next Steps
 
-- Random Forest model trained on Morocco + DRC field data — complements AI classification with a locally-trained statistical model
-- Geospatial health model (distance-decay, population density) — supersedes the text-based AI heuristic from Section 5b with actual census/satellite data
-- Extended NLP: Arabic (full), Lingala, Swahili vocabulary expansion — reduces reliance on AI fallback in low-connectivity deployments
-- Statistical confidence intervals on all estimates
-- External validation with university/NGO partner
-- **Field validation of AI classification accuracy** against manually-verified batches (Section 2b)
-- **Multimodal classification** (title + photo) for batches with ambiguous or minimal text descriptions
 - **Real geocoding/routing API for buyer matching** (Section 5c) — replaces the AI-estimated distance heuristic with actual road-network distances once buyer site addresses are structured data instead of free text
+- **Stripe multi-currency native** — MAD via local acquirer, removes the current EUR fallback
+- **GitHub auto-update** across all country sites
+- **Full Arabic, Lingala, Swahili keyword vocabularies** — reduces reliance on AI fallback in low-connectivity deployments
 
 ---
 
