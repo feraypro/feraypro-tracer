@@ -23,7 +23,7 @@
  *  3. Dans les réglages FP Tracer → renseigner les clés Stripe
  *  4. Configurer le webhook Stripe → URL fournie dans les réglages
  *
- * Version : 1.0.0 — FerayPro Tracer v2.0.0+
+ * Version : 2.3.0 — FerayPro Tracer v2.3.0+
  * Licence : MIT
  */
 
@@ -112,12 +112,17 @@ function fpt_stripe_save_settings_hook() {
     ];
 
     foreach ( $fields as $key => $default ) {
-        if ( isset( $_POST[ $key ] ) ) {
+        if ( ! isset( $_POST[ $key ] ) ) continue;
+
+        if ( $key === 'fpt_stripe_mode' ) {
             // Mode : valider enum
-            if ( $key === 'fpt_stripe_mode' ) {
-                update_option( $key, in_array( $_POST[$key], ['test','live'] ) ? $_POST[$key] : 'test' );
-            } else {
-                update_option( $key, sanitize_text_field( $_POST[$key] ) );
+            update_option( $key, in_array( $_POST[$key], ['test','live'] ) ? $_POST[$key] : 'test' );
+        } else {
+            // Clés API et webhook secret : ne remplacer que si la valeur soumise est non vide
+            // (empêche l'effacement accidentel par un "Enregistrer" sans retoucher les champs)
+            $val = sanitize_text_field( $_POST[$key] );
+            if ( $val !== '' ) {
+                update_option( $key, $val );
             }
         }
     }
@@ -139,6 +144,12 @@ function fpt_stripe_admin_card() {
     $whsec         = get_option( 'fpt_stripe_webhook_secret', '' );
     $webhook_url   = fpt_stripe_webhook_url();
     $configured    = fpt_stripe_is_configured();
+
+    // Masquage partiel des clés secrètes (jamais émises en clair dans le HTML)
+    $mask = fn( $k ) => $k ? substr( $k, 0, 12 ) . str_repeat( '•', 16 ) : '';
+    $test_sec_hint = $mask( $test_sec );
+    $live_sec_hint = $mask( $live_sec );
+    $whsec_hint    = $mask( $whsec );
 
     // Détecter clés inversées
     $keys_inverted = ( str_starts_with($test_sec, 'pk_') || str_starts_with($test_pub, 'sk_')
@@ -183,9 +194,12 @@ function fpt_stripe_admin_card() {
             <div class="fpt-adm-field">
                 <label>Clé secrète TEST</label>
                 <input type="password" name="fpt_stripe_test_secret"
-                       value="<?php echo esc_attr( $test_sec ); ?>"
-                       placeholder="sk_test_...">
-                <span class="fpt-adm-hint">Ne jamais exposer cette clé côté client.</span>
+                       placeholder="<?php echo $test_sec_hint ? esc_attr( $test_sec_hint ) : 'sk_test_...'; ?>"
+                       autocomplete="off">
+                <span class="fpt-adm-hint">
+                    <?php if ( $test_sec_hint ) : ?>Clé actuelle : <code><?php echo esc_html( $test_sec_hint ); ?></code> — laisser vide pour ne pas la modifier.<br><?php endif; ?>
+                    Ne jamais exposer cette clé côté client.
+                </span>
             </div>
 
             <!-- Clés LIVE -->
@@ -198,18 +212,24 @@ function fpt_stripe_admin_card() {
             <div class="fpt-adm-field">
                 <label>Clé secrète LIVE</label>
                 <input type="password" name="fpt_stripe_live_secret"
-                       value="<?php echo esc_attr( $live_sec ); ?>"
-                       placeholder="sk_live_...">
+                       placeholder="<?php echo $live_sec_hint ? esc_attr( $live_sec_hint ) : 'sk_live_...'; ?>"
+                       autocomplete="off">
+                <span class="fpt-adm-hint">
+                    <?php if ( $live_sec_hint ) : ?>Clé actuelle : <code><?php echo esc_html( $live_sec_hint ); ?></code> — laisser vide pour ne pas la modifier.<br><?php endif; ?>
+                    Ne jamais exposer cette clé côté client.
+                </span>
             </div>
 
             <!-- Webhook -->
             <div class="fpt-adm-field">
                 <label>Webhook Secret</label>
                 <input type="password" name="fpt_stripe_webhook_secret"
-                       value="<?php echo esc_attr( $whsec ); ?>"
-                       placeholder="whsec_...">
+                       placeholder="<?php echo $whsec_hint ? esc_attr( $whsec_hint ) : 'whsec_...'; ?>"
+                       autocomplete="off">
                 <span class="fpt-adm-hint">
+                    <?php if ( $whsec_hint ) : ?>Secret actuel : <code><?php echo esc_html( $whsec_hint ); ?></code> — laisser vide pour ne pas le modifier.<br><?php endif; ?>
                     Obtenu dans Stripe Dashboard → Developers → Webhooks → Signing secret.
+                    <?php if ( ! $whsec ) : ?><strong style="color:#c0392b"> ⚠️ Requis — les webhooks sont rejetés tant qu'aucun secret n'est configuré.</strong><?php endif; ?>
                 </span>
             </div>
 
@@ -387,13 +407,18 @@ function fpt_stripe_handle_webhook() {
     $sig_header = $_SERVER['HTTP_STRIPE_SIGNATURE'] ?? '';
     $whsec      = fpt_stripe_webhook_secret();
 
-    // ── Vérification signature Stripe ────────────────────────────────────────
-    if ( $whsec ) {
-        $valid = fpt_stripe_verify_signature( $payload, $sig_header, $whsec );
-        if ( ! $valid ) {
-            http_response_code( 400 );
-            exit( 'Invalid signature' );
-        }
+    // ── Vérification signature Stripe (obligatoire — fail-closed) ─────────────
+    // Tant qu'aucun secret n'est configuré, AUCUN webhook n'est accepté : un secret
+    // vide ne doit jamais signifier "faire confiance par défaut", qui permettrait
+    // à n'importe qui de POSTer un faux événement et de marquer un lot "payé".
+    if ( ! $whsec ) {
+        http_response_code( 503 );
+        exit( 'Webhook secret not configured' );
+    }
+    $valid = fpt_stripe_verify_signature( $payload, $sig_header, $whsec );
+    if ( ! $valid ) {
+        http_response_code( 400 );
+        exit( 'Invalid signature' );
     }
 
     $event = json_decode( $payload, true );
@@ -417,11 +442,11 @@ function fpt_stripe_handle_webhook() {
         exit( 'Missing lot_id in metadata' );
     }
 
-    // Vérifier cohérence avec la session stockée
+    // Vérifier qu'une session Stripe a bien été créée pour ce lot, et qu'elle correspond
     $stored_session = get_post_meta( $lot_id, '_fpt_stripe_session_id', true );
-    if ( $stored_session && $stored_session !== $session_id ) {
+    if ( ! $stored_session || $stored_session !== $session_id ) {
         http_response_code( 400 );
-        exit( 'Session ID mismatch' );
+        exit( 'Session ID mismatch or no session on record for this lot' );
     }
 
     // ── Marquer comme payé ────────────────────────────────────────────────────

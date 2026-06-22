@@ -21,7 +21,7 @@
  *               fpt_get_partenaires_list(), fpt_get_partenaire_by_slug(), fpt_lang()
  *               Constantes : FPT_VERSION, FPT_PLUGIN_DIR, FPT_PLUGIN_URL
  *
- * Version : 1.0.0 — FerayPro Tracer v1.9.0+
+ * Version : 2.3.0 — FerayPro Tracer v2.3.0+
  * Licence : MIT
  */
 

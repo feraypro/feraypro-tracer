@@ -6,7 +6,7 @@
  * Règle d'or : l'IA retourne uniquement un SLUG de matière ("cuivre", "acier"…)
  * PHP fait TOUS les calculs CO₂ à partir de fpt_co2_factors() — aucun facteur dans les prompts.
  *
- * @version 1.0.0
+ * @version 2.3.0
  * @requires feraypro-tracer.php (fpt_co2_factors, fpt_calculate_co2, fpt_grid_intensity)
  */
 
